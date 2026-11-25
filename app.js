@@ -33,12 +33,11 @@ const PGC = [
 ];
 
 /* ---------------- Capa de datos (local o Supabase) ---------------- */
-let sb = null, db;
-if (LOCAL) {
-  const K = "contab-local-v2";
-  const g = () => { const d = JSON.parse(localStorage.getItem(K) || "{}"); for (const k of ["empresas", "cuentas", "asientos", "apuntes", "lineas", "terceros", "facturas", "flineas", "libros", "liquidaciones", "manual"]) d[k] ||= []; return d; };
-  const s = d => localStorage.setItem(K, JSON.stringify(d));
-  db = {
+let sb = null, dbNube = null, dbLS = null;
+const TABLAS_LOCAL = ["empresas", "cuentas", "asientos", "apuntes", "lineas", "terceros", "facturas", "flineas", "libros", "liquidaciones", "manual"];
+const normaliza = d => { for (const k of TABLAS_LOCAL) d[k] ||= []; return d; };
+// Backend de datos con persistencia intercambiable: el navegador (localStorage) o un archivo de la carpeta de Drive
+const mkLocal = (g, s) => ({
     async empresas() { return g().empresas; },
     async crearEmpresa(nombre, cif) { const d = g(); const e = { id: uid(), nombre, cif }; d.empresas.push(e); s(d); return e; },
     async cargar(eid) { const d = g(), f = x => x.empresa_id === eid; return { cuentas: d.cuentas.filter(f), asientos: d.asientos.filter(f), apuntes: d.apuntes.filter(f), lineas: d.lineas.filter(f), terceros: d.terceros.filter(f), facturas: d.facturas.filter(f), flineas: d.flineas.filter(f), libros: d.libros.filter(f), liquidaciones: d.liquidaciones.filter(f), manual: d.manual.filter(f) }; },
@@ -68,7 +67,10 @@ if (LOCAL) {
     async guardarLinea(l) { const d = g(); const i = d.lineas.findIndex(x => x.id === l.id); if (i < 0) d.lineas.push(l); else d.lineas[i] = l; s(d); },
     async borrarLinea(id) { const d = g(); d.lineas = d.lineas.filter(l => l.id !== id); s(d); },
     async borrarLineas(eid, libro) { const d = g(); d.lineas = d.lineas.filter(l => !(l.empresa_id === eid && l.libro === libro)); s(d); }
-  };
+});
+if (LOCAL) {
+  const K = "contab-local-v2";
+  dbLS = mkLocal(() => normaliza(JSON.parse(localStorage.getItem(K) || "{}")), d => localStorage.setItem(K, JSON.stringify(d)));
 } else {
   const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
   sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -77,7 +79,7 @@ if (LOCAL) {
     let out = [], from = 0;
     for (;;) { const d = ok(await sb.from(tabla).select("*").eq("empresa_id", eid).order("id").range(from, from + 999)); out = out.concat(d); if (d.length < 1000) return out; from += 1000; }
   };
-  db = {
+  dbNube = {
     async empresas() { return ok(await sb.from("empresas").select("*").order("nombre")); },
     async crearEmpresa(nombre, cif) { return ok(await sb.from("empresas").insert({ nombre, cif }).select().single()); },
     async cargar(eid) { const [cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones, manual] = await Promise.all(["cuentas", "asientos", "apuntes", "diario_lineas", "terceros", "facturas", "factura_lineas", "diario_libros", "liquidaciones", "modelos_manual"].map(t => todo(t, eid))); return { cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones, manual }; },
@@ -101,6 +103,49 @@ if (LOCAL) {
     async borrarLineas(eid, libro) { ok(await sb.from("diario_lineas").delete().eq("empresa_id", eid).eq("libro", libro)); }
   };
 }
+
+/* ---------------- Almacenamiento por empresa: nube (Supabase), navegador o carpeta de Google Drive ---------------- */
+// Las empresas "Drive" guardan todos sus datos en un archivo JSON dentro de una carpeta que elige el usuario
+// (la carpeta sincronizada de Google Drive para ordenador). Requiere Chrome o Edge (File System Access).
+const SOPORTA_DRIVE = typeof window.showDirectoryPicker === "function";
+const idb = () => new Promise((res, rej) => { const r = indexedDB.open("contab-drive", 1); r.onupgradeneeded = () => r.result.createObjectStore("empresas", { keyPath: "id" }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const idbTx = async (modo, f) => { const d = await idb(); return new Promise((res, rej) => { const t = d.transaction("empresas", modo), q = f(t.objectStore("empresas")); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); };
+const idbTodas = () => idbTx("readonly", st => st.getAll());
+const idbGuardar = r => idbTx("readwrite", st => st.put(r));
+const driveAbiertas = new Map(); // id de empresa -> backend con su archivo ya cargado
+const slug = s => (s || "empresa").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "empresa";
+function backendArchivo(reg, d) {
+  const c = { timer: null, cola: Promise.resolve() };
+  const escribir = () => { c.cola = c.cola.then(async () => { const fh = await reg.handle.getFileHandle(reg.archivo, { create: true }); const w = await fh.createWritable(); await w.write(JSON.stringify(d)); await w.close(); }).catch(e => alert("No se pudo guardar en la carpeta de Drive: " + e.message)); };
+  return mkLocal(() => d, () => { clearTimeout(c.timer); c.timer = setTimeout(escribir, 250); });
+}
+async function pedirPermiso(handle) { const o = { mode: "readwrite" }; if ((await handle.queryPermission(o)) === "granted") return true; return (await handle.requestPermission(o)) === "granted"; }
+async function abrirDrive(reg) { // debe llamarse desde un clic del usuario (el navegador pide permiso cada sesión)
+  if (driveAbiertas.has(reg.id)) return;
+  if (!(await pedirPermiso(reg.handle))) throw new Error("Sin permiso para leer y escribir en la carpeta de Drive.");
+  const fh = await reg.handle.getFileHandle(reg.archivo);
+  driveAbiertas.set(reg.id, backendArchivo(reg, normaliza(JSON.parse(await (await fh.getFile()).text()))));
+}
+async function crearEnDrive(nombre, cif, handle) {
+  if (!(await pedirPermiso(handle))) throw new Error("Sin permiso para escribir en la carpeta elegida.");
+  const id = uid(), archivo = `Contabilidad_${slug(nombre)}_${id.slice(0, 8)}.json`, reg = { id, nombre, cif, archivo, handle }, d = normaliza({ empresas: [{ id, nombre, cif }] });
+  const fh = await handle.getFileHandle(archivo, { create: true }), w = await fh.createWritable(); await w.write(JSON.stringify(d)); await w.close();
+  driveAbiertas.set(id, backendArchivo(reg, d)); await idbGuardar(reg);
+  return { id, nombre, cif, almacen: "drive" };
+}
+const baseDb = () => LOCAL ? dbLS : dbNube;
+const backendActual = () => {
+  const e = S.emp;
+  if (e && e.almacen === "drive") { const b = driveAbiertas.get(e.id); if (!b) throw new Error("La carpeta de Drive de esta empresa no está abierta. Selecciónela de nuevo."); return b; }
+  return baseDb();
+};
+async function listarEmpresas() {
+  const principal = (await baseDb().empresas()).map(e => ({ ...e, almacen: LOCAL ? "local" : "nube" }));
+  let dr = []; try { dr = (await idbTodas()).map(r => ({ id: r.id, nombre: r.nombre, cif: r.cif, almacen: "drive", reg: r })); } catch { /* sin IndexedDB */ }
+  return [...principal, ...dr].sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+// db enruta cada operación al almacén de la empresa activa (nube, navegador o archivo de Drive)
+const db = new Proxy({}, { get: (_, m) => (...a) => m === "empresas" ? listarEmpresas() : backendActual()[m](...a) });
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
@@ -772,15 +817,30 @@ function render() {
   };
   $app.innerHTML = `<div class="fo-top"><button data-a="nav" title="Menú">☰</button><b>Contabilidad</b><span class="ver" title="Versión del programa">v${esc(VERSION)}</span>
    <div class="busca"><input id="busca" list="paginas" placeholder="Buscar una página"><datalist id="paginas">${Object.values(NOMBRES).map(n => `<option value="${n}">`).join("")}</datalist></div>
-   <select id="emp">${S.empresas.map(e => `<option value="${e.id}" ${e.id === S.emp.id ? "selected" : ""}>${esc(e.nombre)}</option>`).join("")}</select>
+   <select id="emp">${S.empresas.map(e => `<option value="${e.id}" ${e.id === S.emp.id ? "selected" : ""}>${esc(e.nombre)}${e.almacen === "drive" ? "  ·  Drive" : ""}</option>`).join("")}</select>
    <button data-a="nuevaemp" title="Nueva empresa">+</button>
    <span class="ej">Ejercicio <select id="ej">${years.map(y => `<option ${y === S.ej ? "selected" : ""}>${y}</option>`).join("")}</select></span>
    ${sb ? `<button data-a="salir">Salir</button>` : ""}<span class="av">PO</span></div>
    <div class="fo-body"><div class="fo-rail"><button data-a="nav" title="Menú">☰</button><button data-a="vista" data-v="inicio" title="Inicio">⌂</button></div>
    <div class="fo-page">${LOCAL ? `<p class="aviso">Modo local de pruebas: los datos están solo en este navegador.</p>` : ""}${V[S.vista]()}</div></div>${S.nav ? navHtml() : ""}`;
 }
+const leerFormEmp = () => {
+  const f = S.formEmp || (S.formEmp = { nombre: "", cif: "", alm: LOCAL ? "local" : "nube", handle: null }), n = document.getElementById("en");
+  if (n) { f.nombre = n.value; f.cif = document.getElementById("ecif").value; const r = document.querySelector("input[name=alm]:checked"); if (r) f.alm = r.value; }
+  return f;
+};
 function renderEmpresaNueva() {
-  $app.innerHTML = `<div class="login card"><h2>Nueva empresa</h2><input id="en" placeholder="Nombre"><input id="ecif" placeholder="CIF"><button class="p" data-a="crearemp">Crear</button></div>`;
+  const f = leerFormEmp();
+  const opc = (v, t, d, dis) => `<label class="opcalm ${dis ? "dis" : ""}"><input type="radio" name="alm" value="${v}" ${f.alm === v ? "checked" : ""} ${dis ? "disabled" : ""}><span><b>${t}</b><br><small>${d}</small></span></label>`;
+  $app.innerHTML = `<div class="login card" style="max-width:30rem"><h2>Nueva empresa</h2><input id="en" placeholder="Nombre" value="${esc(f.nombre)}"><input id="ecif" placeholder="CIF" value="${esc(f.cif)}">
+   <div class="sec" style="margin:.8rem 0 .3rem">¿Dónde se guardan los datos?</div>
+   ${LOCAL ? opc("local", "Este navegador (pruebas)", "Los datos quedan solo en este navegador.") : opc("nube", "Nube (Supabase)", "Los datos se guardan en tu base de datos en la nube, con usuarios y copia de seguridad.")}
+   ${opc("drive", "Mi Google Drive (carpeta del ordenador)", SOPORTA_DRIVE ? "Los datos se guardan en un archivo dentro de la carpeta de Drive que elijas." : "Solo disponible en Chrome o Edge en un ordenador.", !SOPORTA_DRIVE)}
+   ${f.alm === "drive" ? `<div class="row" style="margin-top:.5rem"><button data-a="elegirdrive">Elegir carpeta de Drive…</button><span>${f.handle ? "📁 " + esc(f.handle.name) : "Ninguna carpeta elegida"}</span></div>` : ""}
+   <div class="row" style="margin-top:.8rem"><button class="p" data-a="crearemp">Crear</button>${S.empPrev ? `<button data-a="cancelaremp">Cancelar</button>` : ""}</div></div>`;
+}
+function renderAbrirDrive() {
+  $app.innerHTML = `<div class="login card" style="max-width:30rem"><h2>Abrir empresa de Drive</h2><p>La empresa <b>${esc(S.emp.nombre)}</b> guarda sus datos en una carpeta de tu Google Drive. Por seguridad, el navegador pide permiso cada vez que abres el programa.</p><button class="p" data-a="abrirdrive">Abrir la carpeta de Drive</button></div>`;
 }
 function renderLogin(msg = "") {
   $app.innerHTML = `<div class="login card"><h2>Contabilidad <small class="ver" style="color:var(--tx2)">v${esc(VERSION)}</small></h2><input id="lu" type="email" placeholder="Email"><input id="lp" type="password" placeholder="Contraseña"><button class="p" data-a="login">Entrar</button><p class="ko">${esc(msg)}</p></div>`;
@@ -805,7 +865,12 @@ document.addEventListener("keydown", e => {
 document.addEventListener("change", async e => {
   const t = e.target;
   try {
-    if (t.id === "emp") { S.emp = S.empresas.find(x => x.id === t.value); S.libro = null; await recargar(); }
+    if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
+    else if (t.id === "emp") {
+      const e2 = S.empresas.find(x => x.id === t.value);
+      try { if (e2.almacen === "drive") await abrirDrive(e2.reg); } catch (err) { render(); throw err; }
+      S.emp = e2; S.libro = null; await recargar();
+    }
     else if (t.id === "ej") { S.ej = +t.value; render(); }
     else if (t.id === "cm") { S.filtroCta = t.value; render(); }
     else if (t.id === "fp") { S.filtroPend = t.value; render(); }
@@ -864,8 +929,23 @@ document.addEventListener("click", async e => {
     else if (a === "navsec") { S.navCerr[b.dataset.id] = !S.navCerr[b.dataset.id]; render(); }
     else if (a === "navexp") { S.navCerr = {}; render(); }
     else if (a === "navcon") { const m = NAV.find(x => x.g === S.navMod); if (m) m.sec.forEach(s => { S.navCerr[m.g + "|" + s.n] = true; }); render(); }
-    else if (a === "nuevaemp") { S.emp = null; $app.innerHTML = ""; renderEmpresaNueva(); }
-    else if (a === "crearemp") { const e2 = await db.crearEmpresa(document.getElementById("en").value.trim(), document.getElementById("ecif").value.trim()); S.empresas = await db.empresas(); S.emp = S.empresas.find(x => x.id === e2.id); await db.crearCuentas(S.emp.id, [...PGC, ...PLAN_BASE]); await recargar(); }
+    else if (a === "nuevaemp") { S.empPrev = S.emp; S.emp = null; S.formEmp = null; $app.innerHTML = ""; renderEmpresaNueva(); }
+    else if (a === "elegirdrive") {
+      const f = leerFormEmp();
+      try { f.handle = await window.showDirectoryPicker({ mode: "readwrite" }); } catch (e2) { if (e2.name !== "AbortError") throw e2; }
+      renderEmpresaNueva();
+    }
+    else if (a === "cancelaremp") { S.emp = S.empPrev; S.empPrev = null; S.formEmp = null; render(); }
+    else if (a === "abrirdrive") { await abrirDrive(S.emp.reg); await recargar(); }
+    else if (a === "crearemp") {
+      const f = leerFormEmp(), nombre = f.nombre.trim(), cif = f.cif.trim();
+      if (!nombre) return alert("Falta el nombre de la empresa.");
+      let e2;
+      if (f.alm === "drive") { if (!f.handle) return alert("Elija primero la carpeta de Drive."); e2 = await crearEnDrive(nombre, cif, f.handle); }
+      else e2 = await db.crearEmpresa(nombre, cif);
+      S.empresas = await db.empresas(); S.emp = S.empresas.find(x => x.id === e2.id); S.formEmp = null; S.empPrev = null;
+      await db.crearCuentas(S.emp.id, [...PGC, ...PLAN_BASE]); await recargar();
+    }
     else if (a === "selcuenta") { S.sel = b.dataset.id; render(); }
     else if (a === "togglenueva") { S.nueva = !S.nueva; if (S.nueva) { const c = S.d.cuentas.find(x => x.id === S.sel), m = c ? (c.codigo.length < 9 ? c.codigo : maestroDe(c.codigo)) : ""; S.nuevaCod = m ? siguienteCuenta(m) : ""; } render(); }
     else if (a === "delcuentasel") {
@@ -1020,6 +1100,8 @@ async function arrancar() {
   if (sb) { const { data } = await sb.auth.getSession(); if (!data.session) return renderLogin(); }
   S.empresas = await db.empresas();
   if (!S.empresas.length) return renderEmpresaNueva();
-  S.emp = S.empresas[0]; await recargar();
+  S.emp = S.empresas.find(e => e.almacen !== "drive") || S.empresas[0];
+  if (S.emp.almacen === "drive" && !driveAbiertas.has(S.emp.id)) return renderAbrirDrive();
+  await recargar();
 }
 arrancar();

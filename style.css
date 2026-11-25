@@ -109,6 +109,11 @@ button.p{background:var(--az);color:#fff;border:1px solid var(--az);border-radiu
 button.p:disabled{background:#c7e0f4;border-color:#c7e0f4;cursor:default}
 button.d{color:var(--ko);background:none;border:0;cursor:pointer}
 .ok{color:var(--ok);font-weight:600}.ko{color:var(--ko);font-weight:600}
+.opcalm{display:flex;gap:.6rem;align-items:flex-start;border:1px solid var(--bd);padding:.55rem .7rem;margin:.35rem 0;cursor:pointer}
+.opcalm:hover{background:var(--hov)}
+.opcalm.dis{opacity:.55;cursor:default}
+.login .opcalm input{width:auto;margin:.25rem 0 0}
+.opcalm small{color:var(--tx2)}
 .login{max-width:340px;margin:12vh auto}
 .login input{width:100%;margin:.3rem 0}
 .aviso{background:#fff4ce;border:1px solid #f0d97a;padding:.4rem .8rem;font-size:.85rem}
