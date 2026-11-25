@@ -28,12 +28,14 @@ const PGC = [
 let sb = null, db;
 if (LOCAL) {
   const K = "contab-local-v2";
-  const g = () => { const d = JSON.parse(localStorage.getItem(K) || "{}"); for (const k of ["empresas", "cuentas", "asientos", "apuntes", "lineas", "terceros", "facturas", "flineas", "libros"]) d[k] ||= []; return d; };
+  const g = () => { const d = JSON.parse(localStorage.getItem(K) || "{}"); for (const k of ["empresas", "cuentas", "asientos", "apuntes", "lineas", "terceros", "facturas", "flineas", "libros", "liquidaciones"]) d[k] ||= []; return d; };
   const s = d => localStorage.setItem(K, JSON.stringify(d));
   db = {
     async empresas() { return g().empresas; },
     async crearEmpresa(nombre, cif) { const d = g(); const e = { id: uid(), nombre, cif }; d.empresas.push(e); s(d); return e; },
-    async cargar(eid) { const d = g(), f = x => x.empresa_id === eid; return { cuentas: d.cuentas.filter(f), asientos: d.asientos.filter(f), apuntes: d.apuntes.filter(f), lineas: d.lineas.filter(f), terceros: d.terceros.filter(f), facturas: d.facturas.filter(f), flineas: d.flineas.filter(f), libros: d.libros.filter(f) }; },
+    async cargar(eid) { const d = g(), f = x => x.empresa_id === eid; return { cuentas: d.cuentas.filter(f), asientos: d.asientos.filter(f), apuntes: d.apuntes.filter(f), lineas: d.lineas.filter(f), terceros: d.terceros.filter(f), facturas: d.facturas.filter(f), flineas: d.flineas.filter(f), libros: d.libros.filter(f), liquidaciones: d.liquidaciones.filter(f) }; },
+    async guardarLiquidacion(l) { const d = g(); d.liquidaciones.push(l); s(d); },
+    async borrarLiquidacion(id) { const d = g(); d.liquidaciones = d.liquidaciones.filter(l => l.id !== id); s(d); },
     async guardarLibro(l) { const d = g(); const i = d.libros.findIndex(x => x.id === l.id); if (i < 0) d.libros.push(l); else d.libros[i] = l; s(d); },
     async borrarLibro(id) { const d = g(); d.libros = d.libros.filter(l => l.id !== id); s(d); },
     async guardarTercero(t) { const d = g(); const i = d.terceros.findIndex(x => x.id === t.id); if (i < 0) d.terceros.push(t); else d.terceros[i] = t; s(d); },
@@ -52,7 +54,7 @@ if (LOCAL) {
       const d = g(); const a = d.asientos.find(x => x.id === id); Object.assign(a, { fecha, ejercicio: +fecha.slice(0, 4), concepto, documento });
       d.apuntes = d.apuntes.filter(p => p.asiento_id !== id); apuntes.forEach(p => d.apuntes.push({ id: uid(), asiento_id: id, empresa_id: a.empresa_id, ...p })); s(d);
     },
-    async borrarAsiento(id) { const d = g(); d.asientos = d.asientos.filter(a => a.id !== id); d.apuntes = d.apuntes.filter(a => a.asiento_id !== id); s(d); },
+    async borrarAsiento(id) { const d = g(); d.asientos = d.asientos.filter(a => a.id !== id); d.apuntes = d.apuntes.filter(a => a.asiento_id !== id); d.liquidaciones = d.liquidaciones.filter(l => l.asiento_id !== id); s(d); },
     async guardarLinea(l) { const d = g(); const i = d.lineas.findIndex(x => x.id === l.id); if (i < 0) d.lineas.push(l); else d.lineas[i] = l; s(d); },
     async borrarLinea(id) { const d = g(); d.lineas = d.lineas.filter(l => l.id !== id); s(d); },
     async borrarLineas(eid, libro) { const d = g(); d.lineas = d.lineas.filter(l => !(l.empresa_id === eid && l.libro === libro)); s(d); }
@@ -68,7 +70,9 @@ if (LOCAL) {
   db = {
     async empresas() { return ok(await sb.from("empresas").select("*").order("nombre")); },
     async crearEmpresa(nombre, cif) { return ok(await sb.from("empresas").insert({ nombre, cif }).select().single()); },
-    async cargar(eid) { const [cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros] = await Promise.all(["cuentas", "asientos", "apuntes", "diario_lineas", "terceros", "facturas", "factura_lineas", "diario_libros"].map(t => todo(t, eid))); return { cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros }; },
+    async cargar(eid) { const [cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones] = await Promise.all(["cuentas", "asientos", "apuntes", "diario_lineas", "terceros", "facturas", "factura_lineas", "diario_libros", "liquidaciones"].map(t => todo(t, eid))); return { cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones }; },
+    async guardarLiquidacion(l) { ok(await sb.from("liquidaciones").insert(l)); },
+    async borrarLiquidacion(id) { ok(await sb.from("liquidaciones").delete().eq("id", id)); },
     async guardarLibro(l) { ok(await sb.from("diario_libros").upsert(l)); },
     async borrarLibro(id) { ok(await sb.from("diario_libros").delete().eq("id", id)); },
     async guardarTercero(t) { ok(await sb.from("terceros").upsert(t)); },
@@ -88,7 +92,7 @@ if (LOCAL) {
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [] }, ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [] }, pagoF: null, selPend: null, ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -145,11 +149,11 @@ const V = {};
 const CATEG = { 1: "Pasivo / PN", 2: "Activo", 3: "Activo", 4: "Mixta", 5: "Mixta", 6: "Gastos", 7: "Ingresos" };
 const NAV = [
   ["Libro mayor", [["cuentas", "Cuentas principales"], ["diario", "Diarios generales"], ["mayor", "Transacciones del libro mayor"], ["sumas", "Balance de comprobación"], ["estados", "Estados financieros"]]],
-  ["Cuentas a cobrar", [["clientes", "Todos los clientes"], ["fventa", "Facturas de cliente"]]],
-  ["Cuentas a pagar", [["proveedores", "Todos los proveedores"], ["fcompra", "Facturas de proveedor"]]]
+  ["Cuentas a cobrar", [["clientes", "Todos los clientes"], ["fventa", "Facturas de cliente"], ["cobros", "Cobros pendientes"]]],
+  ["Cuentas a pagar", [["proveedores", "Todos los proveedores"], ["fcompra", "Facturas de proveedor"], ["pagos", "Pagos pendientes"]]]
 ];
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -167,7 +171,7 @@ V.inicio = () => {
   <div class="kpi"><div><small>Resultado del ejercicio ${S.ej}</small><b>${eur(res)} €</b></div><div><small>Caja y bancos</small><b>${eur(bancos)} €</b></div><div><small>Ingresos del ejercicio</small><b>${eur(-tot("7"))} €</b></div></div>
   <div class="sec">Diarios y transacciones</div>
   <div class="mosaicos">${mos("Líneas de diario sin registrar", S.d.lineas.length, S.d.lineas.length ? "rojo" : "", "diario")}${mos("Asientos del ejercicio", S.d.asientos.filter(a => a.ejercicio === S.ej).length, "", "mayor")}${mos("Cuentas principales", S.d.cuentas.length, "", "cuentas")}
-   ${mos("Descuadre global", eur(desc), desc ? "rojo" : "gris", "sumas")}</div>
+   ${mos("Pendiente de cobro", eur(sumPend("V")), "", "cobros")}${mos("Pendiente de pago", eur(sumPend("C")), "", "pagos")}${mos("Descuadre global", eur(desc), desc ? "rojo" : "gris", "sumas")}</div>
   <div class="sec">Enlaces</div>
   <div class="atajos"><a data-a="vista" data-v="diario">Diarios generales</a><a data-a="vista" data-v="cuentas">Cuentas principales</a><a data-a="vista" data-v="mayor">Transacciones del libro mayor</a><a data-a="vista" data-v="estados">Estados financieros</a></div>`, { tabs: ["Espacio de trabajo"], vista: "Inicio" });
 };
@@ -350,7 +354,7 @@ function vistaFacturaEdit() {
   return pagina(cli ? "Factura de cliente" : "Factura de proveedor", acc, `${cab}
   <div class="pagina"><div class="lista"><table class="editable"><tr><th>Descripción</th><th>${cli ? "Cuenta de ingresos" : "Cuenta de gastos"}</th><th class="n">Cantidad</th><th class="n">Precio unitario</th><th>IVA</th><th class="n">Importe</th><th></th></tr>${filas}</table>
    ${reg ? "" : `<div class="row" style="margin-top:.5rem"><button data-a="addlineaf">+ Línea</button></div>`}
-   <div class="pie" id="pieF"><span>Base imponible <b id="tb">${eur(tot.base)}</b></span><span>IVA <b id="ti">${eur(tot.cuota)}</b></span><span>Total <b id="tt">${eur(tot.total)}</b></span></div></div>
+   <div class="pie" id="pieF"><span>Base imponible <b id="tb">${eur(tot.base)}</b></span><span>IVA <b id="ti">${eur(tot.cuota)}</b></span><span>Total <b id="tt">${eur(tot.total)}</b></span>${reg ? `<span>${cli ? "Cobrado" : "Pagado"} <b>${eur(pagadoF(f))}</b></span><span>Pendiente <b>${eur(pendienteF(f))}</b></span>` : ""}</div></div>
   <aside class="factbox"><h3>${cli ? "Cliente" : "Proveedor"}</h3>${t ? `<dl><dt>Cuenta</dt><dd>${esc(t.codigo)}</dd><dt>NIF</dt><dd>${esc(t.cif || "")}</dd><dt>Grupo de impuestos</dt><dd>${esc(t.grupo_iva)}</dd><dt>Saldo</dt><dd>${eur(saldoTer(t))}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione ${cli ? "un cliente" : "un proveedor"}.</p>`}
    <h3 style="margin-top:1rem">Factura</h3><dl><dt>Número</dt><dd>${esc(f.numero)}</dd></dl></aside></div>`, { tabs: ["Líneas", "General"], vista: `${f.numero}${t ? " · " + t.nombre : ""}` });
 }
@@ -396,6 +400,53 @@ async function registrarFactura() {
   S.d = await db.cargar(S.emp.id); abrirFactura(f.id);
 }
 
+/* ---------------- Cobros y pagos pendientes (liquidación de facturas) ---------------- */
+const liqsF = f => S.d.liquidaciones.filter(l => l.factura_id === f.id).sort((a, b) => a.fecha.localeCompare(b.fecha));
+const pagadoF = f => r2(liqsF(f).reduce((a, l) => a + +l.importe, 0));
+const pendienteF = f => r2(totalesF(lineasF(f)).total - pagadoF(f));
+const sumPend = tipo => r2(S.d.facturas.filter(f => f.tipo === tipo && estadoF(f) === "Registrado").reduce((a, f) => a + pendienteF(f), 0));
+
+function vistaPendientes(tipo) {
+  const cli = tipo === "V", todas = S.filtroPend === "todas", hoyS = hoy();
+  const L = S.d.facturas.filter(f => f.tipo === tipo && estadoF(f) === "Registrado" && (todas || pendienteF(f) > 0))
+    .sort((a, b) => (a.fecha_vencimiento || a.fecha_emision || "").localeCompare(b.fecha_vencimiento || b.fecha_emision || ""));
+  const sel = L.find(f => f.id === S.selPend);
+  const estado = f => pendienteF(f) <= 0 ? "Liquidada" : (f.fecha_vencimiento && f.fecha_vencimiento < hoyS ? "Vencida" : "Pendiente");
+  const filas = L.map(f => { const t = terPorId(f.tercero_id) || {}, est = estado(f);
+    return `<tr data-sel class="${f.id === S.selPend ? "sel" : ""}" data-a="selpend" data-id="${f.id}"><td><a data-a="abrirfact" data-id="${f.id}">${esc(f.numero)}</a></td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td>${cli ? "" : `<td>${esc(f.num_externo || "")}</td>`}<td class="${est === "Vencida" ? "ko" : ""}">${f.fecha_vencimiento || ""}</td><td class="n">${eur(totalesF(lineasF(f)).total)}</td><td class="n">${sal(pagadoF(f))}</td><td class="n">${eur(pendienteF(f))}</td><td class="${est === "Vencida" ? "ko" : ""}">${est}</td></tr>`; }).join("");
+  const totalPend = r2(L.reduce((a, f) => a + pendienteF(f), 0));
+  const puede = sel && pendienteF(sel) > 0;
+  const acc = btn("abrirpago", cli ? "Registrar cobro" : "Registrar pago", "", !puede) + btn("deshacerpago", "Deshacer último " + (cli ? "cobro" : "pago"), "", !sel || !liqsF(sel).length) + SEP + btn("abrirfact", "Abrir factura", `data-id="${sel ? sel.id : ""}"`, !sel);
+  const form = sel && S.pagoF === sel.id ? `<div class="card"><b>${cli ? "Registrar cobro" : "Registrar pago"} · ${esc(sel.numero)}</b><div class="row" style="margin-top:.5rem">
+    <label>Fecha<br><input type="date" id="pg-fecha" value="${hoyS}"></label><label>Importe<br><input id="pg-importe" size="12" value="${pendienteF(sel)}"></label>
+    <label>Cuenta de tesorería<br><input id="pg-banco" list="dl" size="12" value="572"></label>
+    <button class="p" data-a="guardarpago">Registrar</button><button data-a="cancelarpago">Cancelar</button></div>
+    <datalist id="dl">${S.d.cuentas.map(c => `<option value="${esc(c.codigo)}">${esc(c.nombre)}</option>`).join("")}</datalist></div>` : "";
+  const t = sel ? terPorId(sel.tercero_id) : null;
+  return pagina(cli ? "Cobros pendientes" : "Pagos pendientes", acc, `${form}
+  <div class="pagina"><div class="lista"><table><tr><th>Factura</th><th>${cli ? "Cliente" : "Proveedor"}</th><th>Nombre</th>${cli ? "" : "<th>Nº factura del proveedor</th>"}<th>Vencimiento</th><th class="n">Importe</th><th class="n">${cli ? "Cobrado" : "Pagado"}</th><th class="n">Pendiente</th><th>Estado</th></tr>${filas || `<tr><td colspan="9" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}
+   ${L.length ? `<tr class="tot"><td colspan="${cli ? 6 : 7}">Total pendiente</td><td class="n">${eur(totalPend)}</td><td></td></tr>` : ""}</table></div>
+  <aside class="factbox"><h3>${cli ? "Cobros" : "Pagos"} de la factura</h3>${sel ? `<dl><dt>${cli ? "Cliente" : "Proveedor"}</dt><dd>${esc(t ? t.nombre : "")}</dd><dt>Saldo del tercero</dt><dd>${t ? eur(saldoTer(t)) : ""}</dd></dl>
+   ${liqsF(sel).length ? `<dl style="margin-top:.6rem">${liqsF(sel).map(l => `<dt>${l.fecha}</dt><dd>${eur(l.importe)}</dd>`).join("")}</dl>` : `<p style="color:var(--tx2)">Sin ${cli ? "cobros" : "pagos"} registrados.</p>`}` : `<p style="color:var(--tx2)">Seleccione una factura.</p>`}</aside></div>`,
+    { filtros: `<label>Mostrar<select id="fp"><option value="pendientes" ${todas ? "" : "selected"}>Pendientes</option><option value="todas" ${todas ? "selected" : ""}>Todas las registradas</option></select></label>` });
+}
+V.cobros = () => S.fact && S.fact.f.tipo === "V" ? vistaFacturaEdit() : vistaPendientes("V");
+V.pagos = () => S.fact && S.fact.f.tipo === "C" ? vistaFacturaEdit() : vistaPendientes("C");
+async function registrarPago(f, fecha, importe, banco) {
+  const cli = f.tipo === "V", t = terPorId(f.tercero_id), ctrl = t.cuenta || (cli ? "430" : "400");
+  const err = [];
+  if (!fecha) err.push("Falta la fecha.");
+  if (!(importe > 0)) err.push("El importe debe ser mayor que cero.");
+  if (importe > pendienteF(f)) err.push("El importe supera lo pendiente (" + eur(pendienteF(f)) + ").");
+  [banco, ctrl].forEach(c => { if (!S.d.cuentas.some(x => x.codigo === c)) err.push("La cuenta " + c + " no existe en las cuentas principales."); });
+  if (err.length) return alert(err.join("\n"));
+  const ap = cli ? [{ cuenta: banco, concepto: null, debe: importe, haber: 0 }, { cuenta: ctrl, concepto: null, debe: 0, haber: importe, tercero_id: t.id }]
+                 : [{ cuenta: ctrl, concepto: null, debe: importe, haber: 0, tercero_id: t.id }, { cuenta: banco, concepto: null, debe: 0, haber: importe }];
+  const aid = await db.crearAsiento(S.emp.id, fecha, (cli ? "Cobro factura " : "Pago factura ") + (cli ? f.numero : (f.num_externo || f.numero)) + " " + t.nombre, ap, cli ? "cobro" : "pago", f.numero);
+  await db.guardarLiquidacion({ id: uid(), empresa_id: S.emp.id, factura_id: f.id, asiento_id: aid, fecha, importe });
+  S.pagoF = null; await recargar();
+}
+
 /* ---------------- Render y eventos ---------------- */
 function render() {
   if (!S.empresas.length && !S.emp) return renderEmpresaNueva();
@@ -439,6 +490,7 @@ document.addEventListener("change", async e => {
     if (t.id === "emp") { S.emp = S.empresas.find(x => x.id === t.value); S.libro = null; await recargar(); }
     else if (t.id === "ej") { S.ej = +t.value; render(); }
     else if (t.id === "cm") { S.filtroCta = t.value; render(); }
+    else if (t.id === "fp") { S.filtroPend = t.value; render(); }
     else if (t.id === "busca") { const k = Object.keys(NOMBRES).find(x => NOMBRES[x].toLowerCase() === t.value.trim().toLowerCase()); if (k) { S.vista = k; render(); } }
     else if (t.dataset.l !== undefined) { leerForm(); render(); }
     else if (t.dataset.f !== undefined) {
@@ -530,6 +582,18 @@ document.addEventListener("click", async e => {
     }
     else if (a === "delasiento") { const as = S.d.asientos.find(x => x.id === S.selAs); if (as && confirm("¿Eliminar el asiento " + as.numero + " (" + as.concepto + ")? No se puede deshacer.")) { await db.borrarAsiento(as.id); S.selAs = null; await recargar(); } }
     /* clientes y proveedores */
+    else if (a === "selpend") { S.selPend = b.dataset.id; S.pagoF = null; render(); }
+    else if (a === "abrirpago") { S.pagoF = S.selPend; render(); }
+    else if (a === "cancelarpago") { S.pagoF = null; render(); }
+    else if (a === "guardarpago") {
+      const f = S.d.facturas.find(x => x.id === S.pagoF); if (!f) return;
+      await registrarPago(f, document.getElementById("pg-fecha").value, r2(num(document.getElementById("pg-importe").value)), document.getElementById("pg-banco").value.trim());
+    }
+    else if (a === "deshacerpago") {
+      const f = S.d.facturas.find(x => x.id === S.selPend); if (!f) return; const l = liqsF(f).slice(-1)[0]; if (!l) return;
+      if (!confirm("¿Deshacer el movimiento de " + eur(l.importe) + " del " + l.fecha + "? Se eliminará su asiento contable.")) return;
+      if (l.asiento_id) await db.borrarAsiento(l.asiento_id); await db.borrarLiquidacion(l.id); await recargar();
+    }
     else if (a === "quitarter") { S.filtroTer = ""; render(); }
     else if (a === "selter") { S.selTer = b.dataset.id; render(); }
     else if (a === "nuevoter") { const tp = b.dataset.t; S.terEdit = { id: uid(), tipo: tp, codigo: siguienteTer(tp), nombre: "", cif: "", grupo_iva: "NAC", telefono: "", email: "", cuenta: "" }; render(); }
@@ -566,6 +630,7 @@ document.addEventListener("click", async e => {
     else if (a === "guardarfact") { await guardarFactura(); render(); }
     else if (a === "registrarfact") { await registrarFactura(); }
     else if (a === "deshacerfact") {
+      if (liqsF(S.fact.f).length) return alert("La factura tiene cobros o pagos registrados. Deshágalos antes de deshacer el registro.");
       if (!confirm("¿Deshacer el registro? Se eliminará el asiento contable de esta factura.")) return;
       if (S.fact.f.asiento_id) await db.borrarAsiento(S.fact.f.asiento_id);
       S.fact.f.estado = "abierto"; S.fact.f.asiento_id = null; await guardarFactura(); render();
