@@ -115,6 +115,26 @@ function saldoPref(cod, soloEj) {
   return r2(s);
 }
 const sal = n => n === 0 ? "_" : eur(n);
+/* Cuentas: los títulos del PGC (menos de 9 dígitos) no admiten movimientos; las cuentas de movimiento tienen 9 dígitos y cuelgan de un título */
+const esMov = c => /^\d{9}$/.test(String(c || ""));
+const nombreMaestro = m => (PGC.find(x => x[0] === m) || [])[1] || "";
+const maestroDe = cod => { let best = ""; for (const c of S.d.cuentas) if (c.codigo.length < 9 && cod.startsWith(c.codigo) && c.codigo.length > best.length) best = c.codigo; return best; };
+const cuentaValida = c => esMov(c) && S.d.cuentas.some(x => x.codigo === c);
+function siguienteCuenta(m) { // siguiente código libre de 9 dígitos bajo el título m (p. ej. 430 -> 430000001)
+  let mx = 0; for (const c of S.d.cuentas) if (c.codigo.length === 9 && c.codigo.startsWith(m)) mx = Math.max(mx, +c.codigo.slice(m.length));
+  return m + String(mx + 1).padStart(9 - m.length, "0");
+}
+const movs = () => S.d.cuentas.filter(c => esMov(c.codigo)).sort((a, b) => a.codigo.localeCompare(b.codigo));
+const optsCuentas = () => movs().map(c => `<option value="${esc(c.codigo)}">${esc(c.nombre)}</option>`).join("");
+const primeraCuenta = m => (movs().find(c => c.codigo.startsWith(m)) || {}).codigo || "";
+const cuentaSis = m => primeraCuenta(m) || siguienteCuenta(m); // la existente, o la que se creará
+async function asegurarCuenta(cod, nombre) { // crea una cuenta de movimiento si cuelga de un título existente
+  if (S.d.cuentas.some(c => c.codigo === cod)) return;
+  const m = maestroDe(cod);
+  if (!esMov(cod) || !m) throw new Error("La cuenta " + cod + " debe tener 9 dígitos y colgar de un título del plan de cuentas.");
+  await db.crearCuentas(S.emp.id, [[cod, nombre || nombreMaestro(m) || cod]]);
+  S.d.cuentas.push({ id: uid(), empresa_id: S.emp.id, codigo: cod, nombre: nombre || nombreMaestro(m) || cod });
+}
 function siguienteDoc() {
   let m = 0;
   for (const x of [...S.d.asientos.map(a => a.documento), ...S.d.lineas.map(l => l.documento)]) { const k = /^DG(\d+)$/.exec(x || ""); if (k) m = Math.max(m, +k[1]); }
@@ -137,6 +157,7 @@ function comprobar(ls) {
   ls.forEach((l, i) => {
     const p = [];
     if (!l.cuenta || !S.d.cuentas.some(c => c.codigo === l.cuenta)) p.push("cuenta inexistente");
+    else if (!esMov(l.cuenta)) p.push("la cuenta " + l.cuenta + " es un título: use una cuenta de 9 dígitos");
     if (!(+l.debe || +l.haber)) p.push("sin importe");
     if (!l.fecha) p.push("sin fecha");
     if (!l.documento) p.push("sin comprobante");
@@ -180,16 +201,18 @@ V.inicio = () => {
 };
 
 V.cuentas = () => {
-  const lista = [...S.d.cuentas].sort((a, b) => a.codigo.localeCompare(b.codigo));
+  const fc = S.filtroCuentas || "todas";
+  const lista = [...S.d.cuentas].filter(c => fc === "todas" || (fc === "mov" ? esMov(c.codigo) : !esMov(c.codigo))).sort((a, b) => a.codigo.localeCompare(b.codigo));
   const sel = S.d.cuentas.find(c => c.id === S.sel);
-  const nivel = c => c.length <= 2 ? 0 : c.length === 3 ? 1 : c.length === 4 ? 2 : 3;
-  const filas = lista.map(c => `<tr data-sel class="${c.codigo.length <= 4 ? "tit" : ""} ${c.id === S.sel ? "sel" : ""}" data-a="selcuenta" data-id="${c.id}"><td style="padding-left:${.5 + nivel(c.codigo) * 1.1}rem">${esc(c.codigo)}</td><td>${esc(c.nombre)}</td><td>${CATEG[c.codigo[0]] || ""}</td><td class="n">${sal(saldoPref(c.codigo, true))}</td><td class="n">${sal(saldoPref(c.codigo, false))}</td></tr>`).join("");
+  const nivel = c => c.length <= 2 ? 0 : c.length === 3 ? 1 : c.length === 4 ? 2 : c.length < 9 ? 3 : 4;
+  const filas = lista.map(c => `<tr data-sel class="${esMov(c.codigo) ? "" : "tit"} ${c.id === S.sel ? "sel" : ""}" data-a="selcuenta" data-id="${c.id}"><td style="padding-left:${.5 + nivel(c.codigo) * 1.1}rem">${esc(c.codigo)}</td><td>${esc(c.nombre)}</td><td>${esMov(c.codigo) ? "Movimiento" : "Título"}</td><td>${CATEG[c.codigo[0]] || ""}</td><td class="n">${sal(saldoPref(c.codigo, true))}</td><td class="n">${sal(saldoPref(c.codigo, false))}</td></tr>`).join("");
   const mov = sel ? S.d.apuntes.filter(p => p.cuenta === sel.codigo).length : 0;
-  const acc = btn("togglenueva", "+ Nuevo") + btn("delcuentasel", "Eliminar", "", !sel) + SEP + btn("pgc", "Cargar plan básico PGC") + SEP + btn("vermayor", "Transacciones", "", !sel);
+  const acc = btn("togglenueva", "+ Nuevo") + btn("delcuentasel", "Eliminar", "", !sel) + SEP + btn("pgc", "Cargar títulos del PGC") + SEP + btn("vermayor", "Transacciones", "", !sel);
   return pagina("Cuentas principales", acc, `
-  ${S.nueva ? `<div class="card"><div class="row"><input id="cc" placeholder="Cuenta principal" size="12"><input id="cn" placeholder="Nombre" size="40"><button class="p" data-a="addcuenta">Aceptar</button><button data-a="togglenueva">Cancelar</button></div></div>` : ""}
-  <div class="pagina"><div class="lista"><table><tr><th>Cuenta principal</th><th>Nombre de la cuenta principal</th><th>Tipo de cuenta</th><th class="n">Saldo del periodo</th><th class="n">Saldo</th></tr>${filas}</table></div>
-  <aside class="factbox"><h3>Detalles</h3>${sel ? `<dl><dt>Cuenta</dt><dd>${esc(sel.codigo)}</dd><dt>Nombre</dt><dd>${esc(sel.nombre)}</dd><dt>Saldo ${S.ej}</dt><dd>${eur(saldoPref(sel.codigo, true))}</dd><dt>Saldo total</dt><dd>${eur(saldoPref(sel.codigo, false))}</dd><dt>Transacciones</dt><dd>${mov}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione una cuenta para ver sus detalles.</p>`}</aside></div>`);
+  ${S.nueva ? `<div class="card"><div class="row"><input id="cc" placeholder="Cuenta (9 dígitos)" size="14" value="${esc(S.nuevaCod || "")}"><input id="cn" placeholder="Nombre" size="40"><button class="p" data-a="addcuenta">Aceptar</button><button data-a="togglenueva">Cancelar</button></div>
+   <small style="color:var(--tx2)">Las cuentas de movimiento tienen 9 dígitos y cuelgan de un título (p. ej. 572000001 bajo 572). Seleccione un título antes de pulsar Nuevo y se propone el siguiente código libre. Los títulos de menos de 9 dígitos no admiten movimientos.</small></div>` : ""}
+  <div class="pagina"><div class="lista"><table><tr><th>Cuenta principal</th><th>Nombre de la cuenta principal</th><th>Tipo</th><th>Categoría</th><th class="n">Saldo del periodo</th><th class="n">Saldo</th></tr>${filas}</table></div>
+  <aside class="factbox"><h3>Detalles</h3>${sel ? `<dl><dt>Cuenta</dt><dd>${esc(sel.codigo)}</dd><dt>Nombre</dt><dd>${esc(sel.nombre)}</dd><dt>Tipo</dt><dd>${esMov(sel.codigo) ? "Movimiento" : "Título"}</dd><dt>Saldo ${S.ej}</dt><dd>${eur(saldoPref(sel.codigo, true))}</dd><dt>Saldo total</dt><dd>${eur(saldoPref(sel.codigo, false))}</dd><dt>Transacciones</dt><dd>${mov}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione una cuenta para ver sus detalles.</p>`}</aside></div>`, { filtros: `<label>Mostrar<select id="fc"><option value="todas" ${fc === "todas" ? "selected" : ""}>Todas</option><option value="mov" ${fc === "mov" ? "selected" : ""}>Solo cuentas de movimiento (9 dígitos)</option><option value="tit" ${fc === "tit" ? "selected" : ""}>Solo títulos</option></select></label>` });
 };
 
 /* Diarios generales: lista de lotes y, dentro, las líneas del lote (como en D365) */
@@ -222,7 +245,7 @@ V.diario = () => {
   const blanca = { fecha: ultima?.fecha || "", documento: ultima?.documento || "", cuenta: "", descripcion: "", debe: "", haber: "" };
   const acc = btn("volverlotes", "← Diarios") + SEP + btn("nuevodoc", "+ Nuevo comprobante") + SEP + btn("validar", "Validar") + `<button class="p" data-a="registrar">Registrar</button>`;
   return pagina("Entradas de diario", acc, `
-  <datalist id="dl">${S.d.cuentas.map(c => `<option value="${esc(c.codigo)}">${esc(c.nombre)}</option>`).join("")}</datalist>
+  <datalist id="dl">${optsCuentas()}</datalist>
   <datalist id="dlter">${S.d.terceros.map(x => `<option value="${esc(x.codigo)}">${esc(x.nombre)}</option>`).join("")}</datalist>
   <div class="pagina"><div class="lista"><table class="editable"><tr><th>Fecha</th><th>Comprobante</th><th>Cuenta</th><th>Nombre de la cuenta</th><th>Cliente / proveedor</th><th>Descripción</th><th class="n">Débito</th><th class="n">Crédito</th><th></th></tr>
   ${ls.map((l, i) => filaJ(l, i, p.prob.some(x => x.id === l.id))).join("")}${filaJ(blanca, ls.length, false)}</table>
@@ -255,7 +278,7 @@ V.mayor = () => {
 function formAsiento() {
   const l = S.lineas, d = r2(l.reduce((s, x) => s + (+x.debe || 0), 0)), h = r2(l.reduce((s, x) => s + (+x.haber || 0), 0));
   return `<div class="row"><input type="date" id="af" value="${S.fechaAs}"><input id="ad" placeholder="Comprobante" size="12" value="${esc(S.docAs)}"><input id="ac" placeholder="Descripción" size="40" value="${esc(S.conceptoAs)}"></div>
-  <datalist id="dl">${S.d.cuentas.map(c => `<option value="${esc(c.codigo)}">${esc(c.nombre)}</option>`).join("")}</datalist>
+  <datalist id="dl">${optsCuentas()}</datalist>
   <table><tr><th>Cuenta</th><th>Descripción</th><th class="n">Débito</th><th class="n">Crédito</th><th></th></tr>
   ${l.map((x, i) => `<tr><td><input list="dl" data-l="${i}" data-k="cuenta" value="${esc(x.cuenta)}" size="9"> <small>${esc(nombreCuenta(x.cuenta))}</small></td>
    <td><input data-l="${i}" data-k="concepto" value="${esc(x.concepto)}"></td>
@@ -315,9 +338,9 @@ function vistaTerceros(tipo) {
     <input id="te-codigo" placeholder="Cuenta" size="10" value="${esc(e.codigo)}"><input id="te-nombre" placeholder="Nombre" size="34" value="${esc(e.nombre)}"><input id="te-cif" placeholder="NIF / CIF" size="12" value="${esc(e.cif || "")}">
     <select id="te-grupo">${["NAC", "UE", "EXT"].map(g => `<option ${g === e.grupo_iva ? "selected" : ""}>${g}</option>`).join("")}</select>
     <input id="te-tel" placeholder="Teléfono" size="12" value="${esc(e.telefono || "")}"><input id="te-email" placeholder="Correo electrónico" size="22" value="${esc(e.email || "")}">
-    <input id="te-cuenta" list="dl" placeholder="Cuenta contable (${cli ? "430" : "400"})" size="12" value="${esc(e.cuenta || "")}">
+    <input id="te-cuenta" list="dl" placeholder="Cuenta de 9 dígitos (automática)" size="22" value="${esc(e.cuenta || "")}">
     <button class="p" data-a="guardarter">Guardar</button><button data-a="cancelter">Cancelar</button></div>
-    <datalist id="dl">${S.d.cuentas.map(c => `<option value="${esc(c.codigo)}">${esc(c.nombre)}</option>`).join("")}</datalist></div>` : "";
+    <datalist id="dl">${optsCuentas()}</datalist></div>` : "";
   const fs = sel ? S.d.facturas.filter(f => f.tercero_id === sel.id) : [];
   const fact = fs.filter(f => estadoF(f) === "Registrado" && (f.fecha_registro || "").startsWith(String(S.ej))).reduce((a, f) => a + totalesF(lineasF(f)).total, 0);
   return pagina(cli ? "Todos los clientes" : "Todos los proveedores", acc, `${form}
@@ -347,11 +370,11 @@ function vistaFacturaEdit() {
    <label>Fecha de factura<br><input type="date" data-f="fecha_emision" ${dis} value="${f.fecha_emision || ""}"></label>
    <label>Fecha de registro<br><input type="date" data-f="fecha_registro" ${dis} value="${f.fecha_registro || ""}"></label>
    <label>Vencimiento<br><input type="date" data-f="fecha_vencimiento" ${dis} value="${f.fecha_vencimiento || ""}"></label>
-   ${cli ? "" : `<label>Retención IRPF<br><select data-f="retencion_tipo" ${dis}><option value="">Ninguna</option><option value="111" ${f.retencion_tipo === "111" ? "selected" : ""}>Profesionales (111)</option><option value="115" ${f.retencion_tipo === "115" ? "selected" : ""}>Alquileres (115)</option><option value="123" ${f.retencion_tipo === "123" ? "selected" : ""}>Capital mobiliario (123)</option></select></label>
+   ${cli ? "" : `<label>Retención IRPF<br><select data-f="retencion_tipo" ${dis}>${opcionesRetencion(f)}</select></label>
    <label>% ret.<br><input data-f="retencion_pct" size="5" ${dis || (f.retencion_tipo ? "" : "disabled")} value="${f.retencion_pct || 0}"></label>`}
    <label>Estado<br><b>${estadoF(f)}</b></label></div></div>
   <datalist id="dlter">${S.d.terceros.filter(x => x.tipo === (cli ? "C" : "P")).map(x => `<option value="${esc(x.codigo)}">${esc(x.nombre)}</option>`).join("")}</datalist>
-  <datalist id="dl">${S.d.cuentas.map(c => `<option value="${esc(c.codigo)}">${esc(c.nombre)}</option>`).join("")}</datalist>`;
+  <datalist id="dl">${optsCuentas()}</datalist>`;
   const filas = ls.map((l, i) => `<tr><td><input data-fl="${i}" data-k="descripcion" size="34" ${dis} value="${esc(l.descripcion || "")}"></td><td><input data-fl="${i}" data-k="cuenta" list="dl" size="9" ${dis} value="${esc(l.cuenta || "")}"></td>
    <td><input class="n" data-fl="${i}" data-k="cantidad" size="7" ${dis} value="${l.cantidad}"></td><td><input class="n" data-fl="${i}" data-k="precio" size="10" ${dis} value="${l.precio}"></td>
    <td><select data-fl="${i}" data-k="iva" ${dis}>${IVAS.map(v => `<option ${v === +l.iva ? "selected" : ""} value="${v}">${v} %</option>`).join("")}</select></td>
@@ -372,7 +395,7 @@ function refrescaF() {
   document.querySelectorAll("[data-imp]").forEach(td => { const l = ls[+td.dataset.imp]; td.textContent = l ? eur((+l.cantidad || 0) * (+l.precio || 0)) : ""; });
 }
 const ivaDefecto = t => (t && t.grupo_iva !== "NAC") ? 0 : 21;
-function nuevaLineaF(f) { return { id: null, descripcion: "", cuenta: f.tipo === "V" ? "700" : "600", cantidad: 1, precio: 0, iva: ivaDefecto(terPorId(f.tercero_id)) }; }
+function nuevaLineaF(f) { return { id: null, descripcion: "", cuenta: primeraCuenta(f.tipo === "V" ? "700" : "600"), cantidad: 1, precio: 0, iva: ivaDefecto(terPorId(f.tercero_id)) }; }
 function abrirFactura(id) { const f = S.d.facturas.find(x => x.id === id); if (!f) return; S.fact = { f: { ...f }, ls: lineasF(f).map(l => ({ ...l })) }; S.selFact = id; if (!S.fact.ls.length) S.fact.ls.push(nuevaLineaF(S.fact.f)); render(); }
 async function guardarFactura() {
   const { f, ls } = S.fact; const fila = x => (x === "" || x === undefined) ? null : x;
@@ -390,17 +413,19 @@ async function registrarFactura() {
   if (!cli && !(f.num_externo || "").trim()) err.push("Falta el nº de factura del proveedor.");
   const validas = ls.filter(l => (+l.cantidad || 0) * (+l.precio || 0) !== 0);
   if (!validas.length) err.push("La factura no tiene líneas con importe.");
-  validas.forEach((l, i) => { if (!S.d.cuentas.some(c => c.codigo === l.cuenta)) err.push("Línea " + (i + 1) + ": la cuenta " + (l.cuenta || "(vacía)") + " no existe."); });
-  const ctrl = t ? (t.cuenta || (cli ? "430" : "400")) : "", ivaC = cli ? "477" : "472";
-  [ctrl, ivaC].forEach(c => { if (t && !S.d.cuentas.some(x => x.codigo === c)) err.push("La cuenta " + c + " no existe en las cuentas principales."); });
-  if (!cli && retDe(f, totalesF(validas).base) > 0 && !S.d.cuentas.some(x => x.codigo === "4751")) err.push("La cuenta 4751 (H.P. acreedora por retenciones) no existe en las cuentas principales.");
+  validas.forEach((l, i) => { if (!cuentaValida(l.cuenta)) err.push("Línea " + (i + 1) + ": la cuenta " + (l.cuenta || "(vacía)") + " no existe o no es de movimiento (9 dígitos)."); });
+  const ctrl = t ? (t.cuenta || "") : "";
+  if (t && !cuentaValida(ctrl)) err.push("El " + (cli ? "cliente" : "proveedor") + " no tiene una cuenta contable de 9 dígitos válida. Edítelo y guárdelo.");
+  const ivaC = cuentaSis(cli ? "477" : "472"), retC = cuentaSis("4751"), necesitaRet = !cli && retDe(f, totalesF(validas).base) > 0;
+  [[ivaC, cli ? "477" : "472"], ...(necesitaRet ? [[retC, "4751"]] : [])].forEach(([c, m]) => { if (!S.d.cuentas.some(x => x.codigo === c) && !S.d.cuentas.some(x => x.codigo === m)) err.push("Falta el título " + m + " en el plan de cuentas. Cargue los títulos del PGC."); });
   if (err.length) return alert("No se puede registrar:\n" + err.join("\n"));
+  await asegurarCuenta(ivaC, nombreMaestro(cli ? "477" : "472")); if (necesitaRet) await asegurarCuenta(retC, nombreMaestro("4751")); // cuentas de movimiento de IVA y retenciones, creadas bajo su título si aún no existen
   const tot = totalesF(validas);
   await guardarFactura();
   const ap = []; const add = (cuenta, imp, lado, extra = {}) => { imp = r2(imp); if (!imp) return; const otro = lado === "debe" ? "haber" : "debe"; const l = imp > 0 ? lado : otro; ap.push({ cuenta, concepto: null, debe: 0, haber: 0, ...extra, [l]: Math.abs(imp) }); };
   const porCta = new Map(); validas.forEach(l => porCta.set(l.cuenta, r2((porCta.get(l.cuenta) || 0) + r2(l.cantidad * l.precio))));
   if (cli) { add(ctrl, tot.total, "debe", { tercero_id: t.id }); porCta.forEach((b, c) => add(c, b, "haber")); add(ivaC, tot.cuota, "haber"); }
-  else { const ret = retDe(S.fact.f, tot.base); porCta.forEach((b, c) => add(c, b, "debe")); add(ivaC, tot.cuota, "debe"); add(ctrl, r2(tot.total - ret), "haber", { tercero_id: t.id }); add("4751", ret, "haber"); }
+  else { const ret = retDe(S.fact.f, tot.base); porCta.forEach((b, c) => add(c, b, "debe")); add(ivaC, tot.cuota, "debe"); add(ctrl, r2(tot.total - ret), "haber", { tercero_id: t.id }); add(retC, ret, "haber"); }
   const concepto = (cli ? "Factura de venta " : "Factura de compra ") + (cli ? f.numero : (f.num_externo || f.numero)) + " " + t.nombre;
   const aid = await db.crearAsiento(S.emp.id, f.fecha_registro, concepto, ap, "factura", f.numero);
   S.fact.f.asiento_id = aid; S.fact.f.estado = "registrado"; await guardarFactura();
@@ -410,6 +435,14 @@ async function registrarFactura() {
 /* ---------------- Cobros y pagos pendientes (liquidación de facturas) ---------------- */
 const liqsF = f => S.d.liquidaciones.filter(l => l.factura_id === f.id).sort((a, b) => a.fecha.localeCompare(b.fecha));
 const pagadoF = f => r2(liqsF(f).reduce((a, l) => a + +l.importe, 0));
+// Retenciones de IRPF predefinidas (modelo : porcentaje). El porcentaje se puede cambiar a mano en la factura.
+const RETENCIONES = [["111:15", "Profesionales 15 % (111)"], ["111:7", "Nuevos profesionales 7 % (111)"], ["111:1", "Estimación objetiva 1 % (111)"], ["115:19", "Alquileres 19 % (115)"], ["123:19", "Capital mobiliario 19 % (123)"]];
+function opcionesRetencion(f) {
+  const clave = f.retencion_tipo ? f.retencion_tipo + ":" + (+f.retencion_pct || 0) : "";
+  const lista = [["", "Ninguna"], ...RETENCIONES];
+  if (clave && !lista.some(x => x[0] === clave)) lista.push([clave, "Modelo " + f.retencion_tipo + " (" + (+f.retencion_pct || 0) + " %)"]);
+  return lista.map(([v, n]) => `<option value="${v}" ${v === clave ? "selected" : ""}>${n}</option>`).join("");
+}
 const retDe = (f, base) => (f.tipo === "C" && f.retencion_tipo) ? r2(base * (+f.retencion_pct || 0) / 100) : 0; // retención IRPF practicada al proveedor
 const retF = f => retDe(f, totalesF(lineasF(f)).base);
 const netoF = f => r2(totalesF(lineasF(f)).total - retF(f));
@@ -429,9 +462,9 @@ function vistaPendientes(tipo) {
   const acc = btn("abrirpago", cli ? "Registrar cobro" : "Registrar pago", "", !puede) + btn("deshacerpago", "Deshacer último " + (cli ? "cobro" : "pago"), "", !sel || !liqsF(sel).length) + SEP + btn("abrirfact", "Abrir factura", `data-id="${sel ? sel.id : ""}"`, !sel);
   const form = sel && S.pagoF === sel.id ? `<div class="card"><b>${cli ? "Registrar cobro" : "Registrar pago"} · ${esc(sel.numero)}</b><div class="row" style="margin-top:.5rem">
     <label>Fecha<br><input type="date" id="pg-fecha" value="${hoyS}"></label><label>Importe<br><input id="pg-importe" size="12" value="${pendienteF(sel)}"></label>
-    <label>Cuenta de tesorería<br><input id="pg-banco" list="dl" size="12" value="572"></label>
+    <label>Cuenta de tesorería<br><input id="pg-banco" list="dl" size="12" value="${cuentaSis("572")}"></label>
     <button class="p" data-a="guardarpago">Registrar</button><button data-a="cancelarpago">Cancelar</button></div>
-    <datalist id="dl">${S.d.cuentas.map(c => `<option value="${esc(c.codigo)}">${esc(c.nombre)}</option>`).join("")}</datalist></div>` : "";
+    <datalist id="dl">${optsCuentas()}</datalist></div>` : "";
   const t = sel ? terPorId(sel.tercero_id) : null;
   return pagina(cli ? "Cobros pendientes" : "Pagos pendientes", acc, `${form}
   <div class="pagina"><div class="lista"><table><tr><th>Factura</th><th>${cli ? "Cliente" : "Proveedor"}</th><th>Nombre</th>${cli ? "" : "<th>Nº factura del proveedor</th>"}<th>Vencimiento</th><th class="n">Importe</th><th class="n">${cli ? "Cobrado" : "Pagado"}</th><th class="n">Pendiente</th><th>Estado</th></tr>${filas || `<tr><td colspan="9" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}
@@ -443,13 +476,16 @@ function vistaPendientes(tipo) {
 V.cobros = () => S.fact && S.fact.f.tipo === "V" ? vistaFacturaEdit() : vistaPendientes("V");
 V.pagos = () => S.fact && S.fact.f.tipo === "C" ? vistaFacturaEdit() : vistaPendientes("C");
 async function registrarPago(f, fecha, importe, banco) {
-  const cli = f.tipo === "V", t = terPorId(f.tercero_id), ctrl = t.cuenta || (cli ? "430" : "400");
+  const cli = f.tipo === "V", t = terPorId(f.tercero_id), ctrl = t.cuenta || "";
   const err = [];
   if (!fecha) err.push("Falta la fecha.");
   if (!(importe > 0)) err.push("El importe debe ser mayor que cero.");
   if (importe > pendienteF(f)) err.push("El importe supera lo pendiente (" + eur(pendienteF(f)) + ").");
-  [banco, ctrl].forEach(c => { if (!S.d.cuentas.some(x => x.codigo === c)) err.push("La cuenta " + c + " no existe en las cuentas principales."); });
+  if (!cuentaValida(ctrl)) err.push("El " + (cli ? "cliente" : "proveedor") + " no tiene una cuenta contable de 9 dígitos válida.");
+  if (!esMov(banco)) err.push("La cuenta de tesorería debe tener 9 dígitos (por ejemplo " + cuentaSis("572") + ").");
+  else if (!S.d.cuentas.some(x => x.codigo === banco) && !maestroDe(banco)) err.push("La cuenta de tesorería " + banco + " no cuelga de ningún título del plan (570, 572…).");
   if (err.length) return alert(err.join("\n"));
+  await asegurarCuenta(banco, nombreMaestro(maestroDe(banco)) || "Tesorería"); // si no existe, se crea bajo su título
   const ap = cli ? [{ cuenta: banco, concepto: null, debe: importe, haber: 0 }, { cuenta: ctrl, concepto: null, debe: 0, haber: importe, tercero_id: t.id }]
                  : [{ cuenta: ctrl, concepto: null, debe: importe, haber: 0, tercero_id: t.id }, { cuenta: banco, concepto: null, debe: 0, haber: importe }];
   const aid = await db.crearAsiento(S.emp.id, fecha, (cli ? "Cobro factura " : "Pago factura ") + (cli ? f.numero : (f.num_externo || f.numero)) + " " + t.nombre, ap, cli ? "cobro" : "pago", f.numero);
@@ -671,6 +707,7 @@ document.addEventListener("change", async e => {
     else if (t.id === "ej") { S.ej = +t.value; render(); }
     else if (t.id === "cm") { S.filtroCta = t.value; render(); }
     else if (t.id === "fp") { S.filtroPend = t.value; render(); }
+    else if (t.id === "fc") { S.filtroCuentas = t.value; render(); }
     else if (t.id === "per") { S.periodo = t.value; render(); }
     else if (t.id === "tl") { S.libroIva = t.value; render(); }
     else if (t.dataset.man !== undefined) {
@@ -687,7 +724,7 @@ document.addEventListener("change", async e => {
         if (t.value.trim() && (!x || x.tipo !== tp)) { alert("No existe esa cuenta de " + (tp === "C" ? "cliente." : "proveedor.")); F.tercero_id = null; }
         else { F.tercero_id = x ? x.id : null; if (x) S.fact.ls.forEach(l => { if (!l.tocado && !(+l.precio)) l.iva = ivaDefecto(x); }); }
         render();
-      } else if (k === "retencion_tipo") { F.retencion_tipo = t.value; F.retencion_pct = t.value === "111" ? 15 : t.value ? 19 : 0; render(); }
+      } else if (k === "retencion_tipo") { const [tp, pc] = t.value.split(":"); F.retencion_tipo = tp || ""; F.retencion_pct = tp ? +pc : 0; render(); }
       else if (k === "retencion_pct") { F.retencion_pct = +num(t.value) || 0; refrescaF(); }
       else { F[k] = t.value; if (k === "fecha_registro") F.fecha_iva = t.value; }
     }
@@ -720,10 +757,23 @@ document.addEventListener("click", async e => {
     else if (a === "nuevaemp") { S.emp = null; $app.innerHTML = ""; renderEmpresaNueva(); }
     else if (a === "crearemp") { const e2 = await db.crearEmpresa(document.getElementById("en").value.trim(), document.getElementById("ecif").value.trim()); S.empresas = await db.empresas(); S.emp = S.empresas.find(x => x.id === e2.id); await db.crearCuentas(S.emp.id, PGC); await recargar(); }
     else if (a === "selcuenta") { S.sel = b.dataset.id; render(); }
-    else if (a === "togglenueva") { S.nueva = !S.nueva; render(); }
-    else if (a === "delcuentasel") { const c = S.d.cuentas.find(x => x.id === S.sel); if (!c) return; if (S.d.apuntes.some(p => p.cuenta === c.codigo)) alert("La cuenta tiene transacciones y no se puede eliminar."); else if (confirm("¿Eliminar la cuenta " + c.codigo + "?")) { await db.borrarCuenta(c.id); S.sel = null; await recargar(); } }
+    else if (a === "togglenueva") { S.nueva = !S.nueva; if (S.nueva) { const c = S.d.cuentas.find(x => x.id === S.sel), m = c ? (c.codigo.length < 9 ? c.codigo : maestroDe(c.codigo)) : ""; S.nuevaCod = m ? siguienteCuenta(m) : ""; } render(); }
+    else if (a === "delcuentasel") {
+      const c = S.d.cuentas.find(x => x.id === S.sel); if (!c) return;
+      if (S.d.apuntes.some(p => p.cuenta === c.codigo)) alert("La cuenta tiene transacciones y no se puede eliminar.");
+      else if (S.d.cuentas.some(x => x.codigo !== c.codigo && x.codigo.startsWith(c.codigo))) alert("El título tiene cuentas debajo. Elimine antes esas cuentas.");
+      else if (S.d.terceros.some(t => t.cuenta === c.codigo) || S.d.lineas.some(l => l.cuenta === c.codigo)) alert("La cuenta la usa un cliente, un proveedor o una línea de diario.");
+      else if (confirm("¿Eliminar la cuenta " + c.codigo + "?")) { await db.borrarCuenta(c.id); S.sel = null; await recargar(); }
+    }
     else if (a === "vermayor") { const c = S.d.cuentas.find(x => x.id === S.sel); if (c) { S.filtroCta = c.codigo; S.vista = "mayor"; render(); } }
-    else if (a === "addcuenta") { const c = document.getElementById("cc").value.trim(), n = document.getElementById("cn").value.trim(); if (c && n) { await db.crearCuentas(S.emp.id, [[c, n]]); S.nueva = false; await recargar(); } }
+    else if (a === "addcuenta") {
+      const c = document.getElementById("cc").value.trim(), n = document.getElementById("cn").value.trim();
+      if (!c || !n) return alert("Faltan el código y el nombre.");
+      if (!/^\d{1,9}$/.test(c)) return alert("El código debe ser numérico: 9 dígitos para cuentas de movimiento (los títulos tienen menos).");
+      if (S.d.cuentas.some(x => x.codigo === c)) return alert("Ya existe la cuenta " + c + ".");
+      if (c.length === 9 && !maestroDe(c)) return alert("La cuenta de movimiento debe colgar de un título existente (p. ej. 572 para 572000001). Cargue los títulos del PGC o cree antes el título.");
+      await db.crearCuentas(S.emp.id, [[c, n]]); S.nueva = false; await recargar();
+    }
     else if (a === "pgc") { await db.crearCuentas(S.emp.id, PGC); await recargar(); }
     /* lotes de diario */
     else if (a === "nuevolote") { const nombre = (prompt("Nombre del diario:", "GENERAL") || "").trim().toUpperCase(); if (!nombre) return; const desc = (prompt("Descripción:") || "").trim(); const l = { id: uid(), empresa_id: S.emp.id, numero: siguienteLote(), nombre, descripcion: desc }; await db.guardarLibro(l); S.selLote = l.numero; await recargar(); }
@@ -763,8 +813,8 @@ document.addEventListener("click", async e => {
     else if (a === "cancelar") { S.lineas = null; S.edit = null; render(); }
     else if (a === "guardar") {
       leerForm(); const ap = apuntesDeLineas(S.lineas);
-      const falta = ap.find(x => !S.d.cuentas.some(c => c.codigo === x.cuenta));
-      if (falta) return alert("La cuenta " + falta.cuenta + " no existe en las cuentas principales.");
+      const falta = ap.find(x => !cuentaValida(x.cuenta));
+      if (falta) return alert("La cuenta " + falta.cuenta + " no existe o no es una cuenta de movimiento de 9 dígitos.");
       if (!S.conceptoAs.trim()) return alert("Falta la descripción.");
       await db.modificarAsiento(S.edit.id, S.fechaAs, S.conceptoAs.trim(), S.docAs.trim() || null, ap);
       S.lineas = null; S.edit = null; await recargar();
@@ -793,8 +843,15 @@ document.addEventListener("click", async e => {
       const e2 = S.terEdit, v = id => document.getElementById(id).value.trim();
       const t = { id: e2.id, empresa_id: S.emp.id, tipo: e2.tipo, codigo: v("te-codigo"), nombre: v("te-nombre"), cif: v("te-cif") || null, grupo_iva: v("te-grupo"), telefono: v("te-tel") || null, email: v("te-email") || null, cuenta: v("te-cuenta") || null };
       if (!t.codigo || !t.nombre) return alert("Faltan la cuenta y el nombre.");
-      if (t.cuenta && !S.d.cuentas.some(c => c.codigo === t.cuenta)) return alert("La cuenta contable " + t.cuenta + " no existe.");
       if (S.d.terceros.some(x => x.id !== t.id && x.codigo.toLowerCase() === t.codigo.toLowerCase())) return alert("Ya existe esa cuenta de cliente/proveedor.");
+      // cada cliente/proveedor tiene su propia cuenta de 9 dígitos bajo 430 (clientes) o 400 (proveedores)
+      const cli2 = t.tipo === "C", master = cli2 ? "430" : "400";
+      if (!S.d.cuentas.some(c => c.codigo === master)) return alert("Falta el título " + master + " en el plan de cuentas. Cargue los títulos del PGC en Cuentas principales.");
+      if (!t.cuenta) t.cuenta = siguienteCuenta(master);
+      if (!esMov(t.cuenta)) return alert("La cuenta contable debe tener 9 dígitos (por ejemplo " + siguienteCuenta(master) + ").");
+      if (!t.cuenta.startsWith(master)) return alert("La cuenta contable de " + (cli2 ? "un cliente" : "un proveedor") + " debe colgar del título " + master + ".");
+      if (S.d.terceros.some(x => x.id !== t.id && x.cuenta === t.cuenta)) return alert("Esa cuenta ya la usa otro cliente o proveedor.");
+      await asegurarCuenta(t.cuenta, t.nombre);
       await db.guardarTercero(t); S.terEdit = null; S.selTer = t.id; await recargar();
     }
     else if (a === "delter") {
