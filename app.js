@@ -200,11 +200,13 @@ function siguienteLote() {
   return "L" + String(m + 1).padStart(6, "0");
 }
 // lotes de diario: los guardados más los que solo existen por tener líneas
-function lotes() {
-  const l = S.d.libros.map(x => ({ ...x }));
-  S.d.lineas.forEach(x => { if (!l.some(y => y.numero === x.libro)) l.push({ numero: x.libro, nombre: "GENERAL", descripcion: "", virtual: true }); });
-  return l.sort((a, b) => a.numero.localeCompare(b.numero));
+function lotes(tipo) { // tipo: general, fprov (facturas de proveedor) o fcli (facturas de cliente); sin tipo, todos
+  const l = S.d.libros.map(x => ({ ...x, tipo: x.tipo || "general" }));
+  S.d.lineas.forEach(x => { if (!l.some(y => y.numero === x.libro)) l.push({ numero: x.libro, nombre: "GENERAL", descripcion: "", virtual: true, tipo: "general" }); });
+  return l.filter(x => !tipo || x.tipo === tipo).sort((a, b) => a.numero.localeCompare(b.numero));
 }
+const tipoDeLibro = num => ((S.d.libros || []).find(x => x.numero === num) || {}).tipo || "general";
+const esFactJ = l => tipoDeLibro(l.libro) !== "general"; // los diarios de facturas llevan una factura por línea
 const lineasLibro = () => S.d.lineas.filter(l => l.libro === S.libro).sort((a, b) => (+a.orden || 0) - (+b.orden || 0));
 
 /* ---------------- Vistas ---------------- */
@@ -218,10 +220,10 @@ const NAV = [
     { n: "Configurar", sub: [{ n: "Plan de cuentas", it: [["cuentas", "Cuentas principales"]] }] }] },
   { g: "Cuentas a cobrar", sec: [
     { n: "Clientes", it: [["clientes", "Todos los clientes"]] },
-    { n: "Facturas y cobros", sub: [{ n: "Facturas", it: [["fventa", "Facturas de cliente"]] }, { n: "Cobros", it: [["cobros", "Cobros pendientes"]] }] }] },
+    { n: "Facturas y cobros", sub: [{ n: "Facturas", it: [["fventa", "Facturas de cliente"], ["diariofcli", "Diario de facturas de cliente"]] }, { n: "Cobros", it: [["cobros", "Cobros pendientes"]] }] }] },
   { g: "Cuentas a pagar", sec: [
     { n: "Proveedores", it: [["proveedores", "Todos los proveedores"]] },
-    { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] }] },
+    { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"], ["diariofprov", "Diario de facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] }] },
   { g: "Impuestos", sec: [
     { n: "Impuestos indirectos", sub: [{ n: "Impuestos", it: [["codigos", "Códigos de impuestos"], ["combos", "Combinaciones de impuestos"]] }] },
     { n: "Consultas e informes", sub: [{ n: "Libros de impuestos", it: [["libroiva", "Libros de IVA"]] }] },
@@ -231,7 +233,7 @@ const NAV = [
 ];
 const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -274,7 +276,18 @@ V.cuentas = () => {
    factura y vencimiento. Cada línea con contrapartida genera su apunte contrario y, si lleva código, el IVA y la retención. */
 const TIPOS_CTA = ["Contabilidad", "Cliente", "Proveedor", "Banco"];
 const CAMPOS_J = ["fecha", "documento", "tipo_cuenta", "cuenta", "descripcion", "debe", "haber", "contra_tipo", "contra_cuenta", "cod_iva", "cod_ret"];
-const EXTRA_J = ["cod_iva", "cod_ret", "factura", "vencimiento", "fecha_doc"]; // se guardan dentro de la columna extra
+const CAMPOS_JF = ["fecha", "documento", "cuenta", "fecha_factura", "factura", "descripcion", "total", "contra_cuenta", "cod_iva", "cod_ret", "vencimiento"]; // diarios de facturas
+const camposJ = () => tipoDeLibro(S.libro) === "general" ? CAMPOS_J : CAMPOS_JF;
+const EXTRA_J = ["cod_iva", "cod_ret", "factura", "vencimiento", "fecha_doc", "fecha_factura", "total"]; // se guardan dentro de la columna extra
+// Una línea de un diario de facturas es una factura: proveedor o cliente, importe total (IVA incluido) y contrapartida de gasto o ingreso.
+// Se convierte en la línea equivalente de un diario general (gasto o ingreso con su contrapartida) para generar el IVA y la retención.
+function sinteticaFact(l) {
+  const ex = l.extra || {}, prov = tipoDeLibro(l.libro) === "fprov", total = r2(ex.total || 0), c = ex.cod_iva ? CODIGO[ex.cod_iva] : null;
+  const p = c && ["nac", "inv"].includes(c.tipo) ? (+c.pct || 0) : 0, t = Math.abs(total);
+  let b = r2(t / (1 + p / 100)); for (const d of [0, 0.01, -0.01]) { const bb = r2(b + d); if (r2(bb + r2(bb * p / 100)) === t) { b = bb; break; } }
+  const base = total < 0 ? -b : b;
+  return { ...l, tipo_cuenta: l.contra_tipo || "Contabilidad", cuenta: l.contra_cuenta || "", debe: prov ? base : 0, haber: prov ? 0 : base, contra_tipo: prov ? "Proveedor" : "Cliente", contra_cuenta: l.cuenta || "" };
+}
 const gJ = (l, k) => EXTRA_J.includes(k) ? ((l.extra || {})[k] ?? "") : (l[k] ?? "");
 const sJ = (l, k, v) => { if (EXTRA_J.includes(k)) { l.extra = l.extra || {}; l.extra[k] = v; } else l[k] = v; };
 const codsDiario = () => [...codsLinea("C"), ...codsLinea("V")].map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]);
@@ -291,7 +304,8 @@ function resolverCuenta(tipo, cod) { // cuenta contable y tercero de una línea 
   return { cuenta: cod, nombre: nombreCuenta(cod) };
 }
 // Apuntes de una línea: la línea, su contrapartida y, si lleva código, el IVA y la retención (importes en signo débito = positivo)
-function expandirLinea(l) {
+function expandirLinea(l0) {
+  const l = esFactJ(l0) ? sinteticaFact(l0) : l0;
   const ap = [], err = []; let iva = 0, ret = 0;
   const base = r2((+l.debe || 0) - (+l.haber || 0)), s = base >= 0 ? 1 : -1, ex = l.extra || {}, c = ex.cod_iva ? CODIGO[ex.cod_iva] : null, cr = ex.cod_ret ? CODIGO[ex.cod_ret] : null;
   const m = resolverCuenta(l.tipo_cuenta, l.cuenta); if (m.error) err.push(m.error);
@@ -312,8 +326,10 @@ function expandirLinea(l) {
 function comprobar(ls) {
   const prob = [], porDoc = new Map(), tieneErr = new Set();
   ls.forEach((l, i) => {
-    const p = [], e = expandirLinea(l); p.push(...e.err);
-    if (!(+l.debe || +l.haber)) p.push("sin importe"); if (!l.fecha) p.push("sin fecha"); if (!l.documento) p.push("sin asiento");
+    const fj = esFactJ(l), ex = l.extra || {}, p = [], e = expandirLinea(l); p.push(...e.err.filter(x => !(fj && x === "falta la cuenta")));
+    if (fj) { if (!(l.cuenta || "").trim()) p.push("falta el " + (tipoDeLibro(l.libro) === "fprov" ? "proveedor" : "cliente")); if (!(l.contra_cuenta || "").trim()) p.push("falta la cuenta de contrapartida (" + (tipoDeLibro(l.libro) === "fprov" ? "gasto" : "ingreso") + ")"); if (!+ex.total) p.push("sin importe total"); if (!ex.factura) p.push("sin nº de factura"); if (!ex.fecha_factura) p.push("sin fecha de factura"); }
+    else if (!(+l.debe || +l.haber)) p.push("sin importe");
+    if (!l.fecha) p.push("sin fecha"); if (!l.documento) p.push("sin asiento");
     if (p.length) { prob.push({ i, id: l.id, texto: p.join(", ") }); tieneErr.add(i); }
     if (l.documento) { const o = porDoc.get(l.documento) || { d: 0, h: 0 }; e.ap.forEach(a => { o.d = r2(o.d + a.debe); o.h = r2(o.h + a.haber); }); porDoc.set(l.documento, o); }
   });
@@ -347,9 +363,20 @@ function detalleJ(ls) {
    <tr><td><b>ASIENTO</b> ${esc(l.documento || "")}</td><td class="n">${eur(A.d)}</td><td class="n">${eur(A.h)}</td><td class="n ${A.d === A.h ? "" : "ko"}">${eur(A.d - A.h)}</td></tr>
    <tr><td><b>DIARIO</b></td><td class="n">${eur(D.d)}</td><td class="n">${eur(D.h)}</td><td class="n ${D.d === D.h ? "" : "ko"}">${eur(D.d - D.h)}</td></tr></table>`;
 }
-V.diario = () => {
+const TITULO_D = { general: "Diarios generales", fprov: "Diario de facturas de proveedor", fcli: "Diario de facturas de cliente" };
+// fila editable de un diario de facturas: proveedor o cliente, fecha y número de factura, importe total, contrapartida, impuestos y vencimiento
+function filaJF(l, i, prob, sel) {
+  const nuevo = !l.id, m = resolverCuenta(l.tipo_cuenta, l.cuenta);
+  const inp = (k, ex = "") => `<input data-j="${i}" data-k="${k}" ${ex} value="${esc(gJ(l, k))}">`;
+  const selc = (k, opts) => `<select data-j="${i}" data-k="${k}">${optsHtml(opts, gJ(l, k))}</select>`;
+  return `<tr data-jr="${i}" class="${prob ? "prob" : ""} ${sel ? "sel" : ""}"><td>${inp("fecha", 'type="date"')}</td><td>${inp("documento", 'size="9"')}</td><td>${inp("cuenta", 'list="dlc" size="9"')}</td><td class="nc" data-nc="${i}">${esc(m.nombre || "")}</td>
+   <td>${inp("fecha_factura", 'type="date"')}</td><td>${inp("factura", 'size="12"')}</td><td>${inp("descripcion", 'size="20"')}</td><td>${inp("total", 'class="n" size="10"')}</td>
+   <td>${inp("contra_cuenta", 'list="dlc" size="10"')}</td><td>${selc("cod_iva", codsDiario())}</td><td>${selc("cod_ret", codsRetDiario())}</td><td>${inp("vencimiento", 'type="date"')}</td><td>${nuevo ? "" : `<button class="d" data-a="dellineaj" data-id="${l.id}">✕</button>`}</td></tr>`;
+}
+const vistaDiario = tipoD => {
+  const fj = tipoD !== "general", prov = tipoD === "fprov";
   if (!S.libro) { // lista de lotes (pestañas Lista, General e Historial)
-    const L = lotes(), sel = L.find(x => x.numero === S.selLote), tab = S.tabs.lotes || "Lista";
+    const L = lotes(tipoD), sel = L.find(x => x.numero === S.selLote), tab = S.tabs.lotes || "Lista";
     const sumas = x => { const ls = S.d.lineas.filter(l => l.libro === x.numero); return { n: ls.length, D: r2(ls.reduce((a, l) => a + (+l.debe || 0), 0)), H: r2(ls.reduce((a, l) => a + (+l.haber || 0), 0)) }; };
     const filas = L.map(x => { const t = sumas(x); return `<tr data-sel class="${x.numero === S.selLote ? "sel" : ""}" data-a="sellote" data-id="${esc(x.numero)}"><td><a data-a="abrirlote" data-id="${esc(x.numero)}">${esc(x.numero)}</a></td><td>${esc(x.nombre)}</td><td>${esc(x.descripcion || "")}</td><td class="n">${t.n}</td><td class="n">${eur(t.D)}</td><td class="n">${eur(t.H)}</td><td>${x.creado ? String(x.creado).slice(0, 10) : ""}</td></tr>`; }).join("");
     const acc = btn("nuevolote", "+ Nuevo") + btn("dellote", "Eliminar", "", !sel) + SEP + btn("abrirlote", "Líneas", `data-id="${esc(S.selLote || "")}"`, !sel);
@@ -358,24 +385,39 @@ V.diario = () => {
     else if (!sel) cuerpo = `<p style="color:var(--tx2)">Seleccione un lote en la pestaña Lista.</p>`;
     else if (tab === "General") cuerpo = `<div class="card"><div class="row"><label>Número de lote<input readonly size="14" value="${esc(sel.numero)}"></label><label>Nombre del diario<input data-lt="nombre" size="14" value="${esc(sel.nombre)}"></label><label>Descripción<input data-lt="descripcion" size="44" value="${esc(sel.descripcion || "")}"></label></div><p style="color:var(--tx2)">El nombre identifica el tipo de diario (por ejemplo GENERAL, D001). Las líneas se registran agrupadas por asiento.</p></div>`;
     else { const t = sumas(sel); cuerpo = `<div class="card"><dl class="factbox" style="box-shadow:none;width:auto;position:static;padding:0"><dl><dt>Número de lote</dt><dd>${esc(sel.numero)}</dd><dt>Creado</dt><dd>${sel.creado ? String(sel.creado).slice(0, 19).replace("T", " ") : "—"}</dd><dt>Líneas sin registrar</dt><dd>${t.n}</dd><dt>Estado</dt><dd>No registrado</dd></dl></dl></div>`; }
-    return pagina("Diarios generales", acc, cuerpo, { tabs: ["Lista", "General", "Historial"], tabKey: "lotes", filtros: `<label>Mostrar<select><option>No registrado</option></select></label>` });
+    return pagina(TITULO_D[tipoD], acc, cuerpo, { tabs: ["Lista", "General", "Historial"], tabKey: "lotes", filtros: `<label>Mostrar<select><option>No registrado</option></select></label>` });
   }
   const lote = lotes().find(x => x.numero === S.libro) || { numero: S.libro, descripcion: "" };
   const ls = lineasLibro(), p = panelJ(ls), ultima = ls[ls.length - 1], tab = S.tabs.jlin || "Lista";
-  const blanca = { fecha: ultima?.fecha || "", documento: ultima?.documento || "", tipo_cuenta: ultima?.tipo_cuenta || "Contabilidad", cuenta: "", descripcion: "", debe: "", haber: "", contra_tipo: "", contra_cuenta: "", extra: {} };
+  const blanca = fj ? { fecha: ultima?.fecha || "", documento: siguienteDoc(), tipo_cuenta: prov ? "Proveedor" : "Cliente", cuenta: "", descripcion: "", debe: 0, haber: 0, contra_tipo: "Contabilidad", contra_cuenta: "", extra: {} }
+    : { fecha: ultima?.fecha || "", documento: ultima?.documento || "", tipo_cuenta: ultima?.tipo_cuenta || "Contabilidad", cuenta: "", descripcion: "", debe: "", haber: "", contra_tipo: "", contra_cuenta: "", extra: {} };
   const hay = ls.some(x => x.id === S.selLinea);
   const acc = btn("volverlotes", "← Diarios") + SEP + btn("nuevodoc", "+ Crear nuevo") + btn("dellineaj", "Eliminar", `data-id="${S.selLinea || ""}"`, !hay) + SEP + btn("validar", "Validar") + `<button class="p" data-a="registrar">Registrar</button>` + SEP +
-    btn("copiarj", "Copiar línea", "", !hay) + btn("invertirj", "Invertir débito/crédito", "", !hay) + btn("saldocta", "Saldo de la cuenta", "", !hay);
+    btn("copiarj", "Copiar línea", "", !hay) + (fj ? "" : btn("invertirj", "Invertir débito/crédito", "", !hay)) + btn("saldocta", "Saldo de la cuenta", "", !hay);
   const lt = S.d.terceros;
-  const cab = `<th>Fecha</th><th>Asiento</th><th>Tipo de cuenta</th><th>Cuenta</th><th>Nombre de la cuenta</th><th>Descripción</th><th class="n">Débito</th><th class="n">Crédito</th><th>Tipo de contrapartida</th><th>Cuenta de contrapartida</th><th>Código de impuestos</th><th>Código de retención</th><th></th>`;
-  const lista = `<table class="editable"><tr>${cab}</tr>${ls.map((l, i) => filaJ(l, i, p.prob.some(x => x.id === l.id), l.id === S.selLinea)).join("")}${filaJ(blanca, ls.length, false, false)}</table><div id="detJ">${detalleJ(ls)}</div>`;
+  const cab = fj ? `<th>Fecha</th><th>Asiento</th><th>${prov ? "Proveedor" : "Cliente"}</th><th>Nombre</th><th>Fecha de la factura</th><th>Factura</th><th>Descripción</th><th class="n">Importe total</th><th>${prov ? "Cuenta de gasto" : "Cuenta de ingresos"}</th><th>Código de impuestos</th><th>Código de retención</th><th>Fecha de vencimiento</th><th></th>`
+    : `<th>Fecha</th><th>Asiento</th><th>Tipo de cuenta</th><th>Cuenta</th><th>Nombre de la cuenta</th><th>Descripción</th><th class="n">Débito</th><th class="n">Crédito</th><th>Tipo de contrapartida</th><th>Cuenta de contrapartida</th><th>Código de impuestos</th><th>Código de retención</th><th></th>`;
+  const fila = fj ? filaJF : filaJ;
+  const lista = `<table class="editable"><tr>${cab}</tr>${ls.map((l, i) => fila(l, i, p.prob.some(x => x.id === l.id), l.id === S.selLinea)).join("")}${fila(blanca, ls.length, false, false)}</table><div id="detJ">${detalleJ(ls)}</div>`;
   const l0 = ls.find(x => x.id === S.selLinea), tt = l0 && l0.tipo_cuenta !== "Contabilidad" && l0.tipo_cuenta !== "Banco" ? terPorCod(l0.cuenta) : null;
   const factura = !l0 ? `<p style="color:var(--tx2)">Seleccione una línea en la pestaña Lista.</p>` : `<div class="card"><div class="row"><label>Factura<input data-jx="factura" size="16" value="${esc((l0.extra || {}).factura || "")}"></label><label>Fecha de documento<input type="date" data-jx="fecha_doc" value="${esc((l0.extra || {}).fecha_doc || "")}"></label><label>Fecha de vencimiento<input type="date" data-jx="vencimiento" value="${esc((l0.extra || {}).vencimiento || "")}"></label></div>
     ${tt ? `<p style="color:var(--tx2)">${esc(tt.nombre)} · NIF ${esc(tt.cif || "")} · Condiciones de pago: ${esc(((CONDICIONES.find(c => c[0] === ((tt.ficha || {}).pago || {}).cond) || [])[1]) || "sin definir")}</p>` : ""}</div>`;
-  return pagina("Entradas de diario", acc, `
+  return pagina(fj ? TITULO_D[tipoD] : "Entradas de diario", acc, `
   <datalist id="dlc">${optsCuentas()}${lt.map(x => `<option value="${esc(x.codigo)}">${esc(x.nombre)}</option>`).join("")}</datalist>
   <div class="pagina"><div class="lista">${tab === "Lista" ? lista : factura}</div><aside class="factbox" id="boxJ">${p.html}</aside></div>`, { tabs: ["Lista", "Factura"], tabKey: "jlin", vista: `${lote.numero}${lote.descripcion ? " · " + lote.descripcion : ""}` });
 };
+async function facturaDeLinea(l, aid) { // crea la factura registrada de una línea de un diario de facturas, enlazada a su asiento
+  const ex = l.extra || {}, prov = tipoDeLibro(l.libro) === "fprov", tp = prov ? "C" : "V", t = terPorCod(l.cuenta), s = sinteticaFact(l), base = prov ? s.debe : s.haber;
+  const c = ex.cod_iva ? CODIGO[ex.cod_iva] : null, cr = ex.cod_ret ? CODIGO[ex.cod_ret] : null;
+  const numero = !prov && ex.factura && !S.d.facturas.some(f => f.tipo === "V" && f.numero === ex.factura) ? ex.factura : siguienteFact(tp);
+  const f = { id: uid(), empresa_id: S.emp.id, tipo: tp, numero, tercero_id: t.id, num_externo: prov ? ex.factura : null, fecha_emision: ex.fecha_factura || l.fecha, fecha_registro: l.fecha, fecha_iva: l.fecha, fecha_vencimiento: ex.vencimiento || null, estado: "registrado", asiento_id: aid, notas: null,
+    retencion_tipo: cr && prov ? cr.modelo : null, retencion_pct: cr ? cr.pct : 0, cod_ret: cr ? cr.cod : null };
+  const ld = { id: uid(), factura_id: f.id, empresa_id: S.emp.id, orden: 0, descripcion: l.descripcion || null, cuenta: l.contra_cuenta, cantidad: 1, precio: base, iva: c ? c.pct : 0, cod_iva: ex.cod_iva || null, cod_rec: null };
+  await db.guardarFactura(f, [ld]); S.d.facturas.push(f); // se añade en memoria para que el siguiente número de factura no se repita
+}
+V.diario = () => vistaDiario("general");
+V.diariofprov = () => vistaDiario("fprov");
+V.diariofcli = () => vistaDiario("fcli");
 function refrescaJ() { // actualiza la validación, los nombres, la línea seleccionada y los totales sin volver a dibujar la rejilla
   const ls = lineasLibro(), p = panelJ(ls), box = document.getElementById("boxJ"), det = document.getElementById("detJ");
   if (box) box.innerHTML = p.html; if (det) det.innerHTML = detalleJ(ls);
@@ -1048,7 +1090,7 @@ document.addEventListener("keydown", e => {
   const t = e.target;
   if (e.key === "Enter" && t.dataset.j !== undefined) {
     e.preventDefault();
-    const i = CAMPOS_J.indexOf(t.dataset.k); const sig = i < CAMPOS_J.length - 1 ? [t.dataset.j, CAMPOS_J[i + 1]] : [String(+t.dataset.j + 1), "fecha"];
+    const cj = camposJ(), i = cj.indexOf(t.dataset.k); const sig = i < cj.length - 1 ? [t.dataset.j, cj[i + 1]] : [String(+t.dataset.j + 1), "fecha"];
     const el = document.querySelector(`[data-j="${sig[0]}"][data-k="${sig[1]}"]`); if (el) el.focus(); else t.blur();
   }
 });
@@ -1131,18 +1173,27 @@ document.addEventListener("change", async e => {
     }
     else if (t.dataset.j !== undefined) {
       const ls = lineasLibro(), i = +t.dataset.j, k = t.dataset.k; let l = ls[i], nueva = false;
-      const esImp = k === "debe" || k === "haber", v = esImp ? num(t.value) : t.value;
+      const tl = tipoDeLibro(S.libro), fj = tl !== "general", esImp = k === "debe" || k === "haber" || k === "total", v = esImp ? num(t.value) : t.value;
       if (!l) { // línea en blanco: se crea al escribir
         const u = ls[ls.length - 1] || {}; nueva = true;
-        l = { id: uid(), empresa_id: S.emp.id, libro: S.libro, fecha: u.fecha || hoy(), documento: u.documento || siguienteDoc(), descripcion: u.descripcion || "", tipo_cuenta: u.tipo_cuenta || "Contabilidad", cuenta: "", debe: 0, haber: 0, contra_tipo: "", contra_cuenta: "", extra: {}, orden: Date.now() };
+        l = { id: uid(), empresa_id: S.emp.id, libro: S.libro, fecha: u.fecha || hoy(), documento: fj ? siguienteDoc() : (u.documento || siguienteDoc()), descripcion: fj ? "" : (u.descripcion || ""), tipo_cuenta: fj ? (tl === "fprov" ? "Proveedor" : "Cliente") : (u.tipo_cuenta || "Contabilidad"), cuenta: "", debe: 0, haber: 0, contra_tipo: fj ? "Contabilidad" : "", contra_cuenta: "", extra: {}, orden: Date.now() };
         S.d.lineas.push(l);
       }
       sJ(l, k, esImp ? (v === "" ? 0 : r2(v)) : v);
+      if (fj) { // al elegir el proveedor o cliente se proponen su IVA, su retención, la cuenta de gasto o ingreso y el vencimiento
+        const ex = l.extra = l.extra || {}, tt = terPorCod(l.cuenta), lado = tl === "fprov" ? "C" : "V";
+        if (k === "vencimiento") ex.vencAuto = false;
+        if (tt && (k === "cuenta" || k === "fecha_factura" || k === "fecha")) {
+          const fi = tt.ficha || {}, cb = fi.comb && comboDe(fi.comb);
+          if (k === "cuenta") { if (!ex.cod_iva) ex.cod_iva = (cb && cb.lado === lado ? cb.iva : "") || codDefecto(tt, lado); if (!ex.cod_ret) ex.cod_ret = (cb && cb.lado === lado ? cb.ret : "") || fi.cod_ret || ""; if (!l.contra_cuenta) l.contra_cuenta = primeraCuenta(lado === "C" ? "600" : "700"); }
+          if (!ex.vencimiento || ex.vencAuto) { const vv = calcVenc(tt, ex.fecha_factura || l.fecha); if (vv) { ex.vencimiento = vv; ex.vencAuto = true; } }
+        }
+      }
       if ((k === "cuenta" || k === "tipo_cuenta" || k === "contra_cuenta" || k === "contra_tipo") && ((l.tipo_cuenta === "Cliente" || l.tipo_cuenta === "Proveedor") && l.cuenta)) { const x = terPorCod(l.cuenta); l.tercero_id = x ? x.id : null; } else if (k === "cuenta" || k === "tipo_cuenta") l.tercero_id = null;
       if (k === "debe" && +l.debe) l.haber = 0; if (k === "haber" && +l.haber) l.debe = 0;
       S.selLinea = l.id;
       await db.guardarLinea(l);
-      if (nueva || k === "debe" || k === "haber") { const sig = CAMPOS_J[CAMPOS_J.indexOf(k) + 1] || "fecha"; const j = i; render(); setTimeout(() => { const el = document.querySelector(`[data-j="${j}"][data-k="${sig}"]`); if (el && document.activeElement === document.body) el.focus(); }, 0); }
+      if (nueva || esImp || (fj && (k === "cuenta" || k === "fecha_factura"))) { const cj2 = camposJ(), sig = cj2[cj2.indexOf(k) + 1] || "fecha"; const j = i; render(); setTimeout(() => { const el = document.querySelector(`[data-j="${j}"][data-k="${sig}"]`); if (el && document.activeElement === document.body) el.focus(); }, 0); }
       else refrescaJ();
     }
   } catch (err) { alert(err.message); }
@@ -1151,7 +1202,7 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
   const a = b.dataset.a;
   try {
-    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (S.vista !== "diario") S.libro = null; S.fact = null; S.terEdit = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
+    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
     else if (a === "nav") { S.nav = !S.nav; if (S.nav) S.navMod = moduloDe(S.vista) || S.navMod; render(); }
     else if (a === "navmod") { S.navMod = b.dataset.id; render(); }
     else if (a === "navsec") { S.navCerr[b.dataset.id] = !S.navCerr[b.dataset.id]; render(); }
@@ -1200,7 +1251,7 @@ document.addEventListener("click", async e => {
     }
     /* lotes de diario */
     else if (a === "tab") { S.tabs[b.dataset.k] = b.dataset.t; render(); }
-    else if (a === "nuevolote") { const nombre = (prompt("Nombre del diario:", "GENERAL") || "").trim().toUpperCase(); if (!nombre) return; const desc = (prompt("Descripción:") || "").trim(); const l = { id: uid(), empresa_id: S.emp.id, numero: siguienteLote(), nombre, descripcion: desc, tipo: "general", ficha: {}, creado: new Date().toISOString() }; await db.guardarLibro(l); S.selLote = l.numero; await recargar(); }
+    else if (a === "nuevolote") { const tp = ({ diariofprov: "fprov", diariofcli: "fcli" })[S.vista] || "general"; const nombre = (prompt("Nombre del diario:", tp === "general" ? "GENERAL" : "FACTURAS") || "").trim().toUpperCase(); if (!nombre) return; const desc = (prompt("Descripción:") || "").trim(); const l = { id: uid(), empresa_id: S.emp.id, numero: siguienteLote(), nombre, descripcion: desc, tipo: tp, ficha: {}, creado: new Date().toISOString() }; await db.guardarLibro(l); S.selLote = l.numero; await recargar(); }
     else if (a === "sellote") { S.selLote = b.dataset.id; render(); }
     else if (a === "abrirlote") { e.stopPropagation(); const n = b.dataset.id || S.selLote; if (n) { S.libro = n; S.selLote = n; render(); } }
     else if (a === "volverlotes") { S.libro = null; render(); }
@@ -1209,7 +1260,7 @@ document.addEventListener("click", async e => {
       if (!confirm("¿Eliminar el lote " + x.numero + " y todas sus líneas sin registrar?")) return;
       await db.borrarLineas(S.emp.id, x.numero); if (x.id) await db.borrarLibro(x.id); S.selLote = null; await recargar();
     }
-    else if (a === "nuevodoc") { const ls = lineasLibro(), l = { id: uid(), empresa_id: S.emp.id, libro: S.libro, fecha: ls[ls.length - 1]?.fecha || hoy(), documento: siguienteDoc(), descripcion: "", tipo_cuenta: "Contabilidad", cuenta: "", debe: 0, haber: 0, contra_tipo: "", contra_cuenta: "", extra: {}, orden: Date.now() }; S.d.lineas.push(l); S.selLinea = l.id; await db.guardarLinea(l); render(); }
+    else if (a === "nuevodoc") { const ls = lineasLibro(), tl = tipoDeLibro(S.libro), fj = tl !== "general", l = { id: uid(), empresa_id: S.emp.id, libro: S.libro, fecha: ls[ls.length - 1]?.fecha || hoy(), documento: siguienteDoc(), descripcion: "", tipo_cuenta: fj ? (tl === "fprov" ? "Proveedor" : "Cliente") : "Contabilidad", cuenta: "", debe: 0, haber: 0, contra_tipo: fj ? "Contabilidad" : "", contra_cuenta: "", extra: {}, orden: Date.now() }; S.d.lineas.push(l); S.selLinea = l.id; await db.guardarLinea(l); render(); }
     else if (a === "dellineaj") { const id = b.dataset.id || S.selLinea; if (!id) return; await db.borrarLinea(id); S.d.lineas = S.d.lineas.filter(l => l.id !== id); if (S.selLinea === id) S.selLinea = null; render(); }
     else if (a === "copiarj") { const l = S.d.lineas.find(x => x.id === S.selLinea); if (!l) return; const c = JSON.parse(JSON.stringify(l)); c.id = uid(); c.orden = Date.now(); S.d.lineas.push(c); S.selLinea = c.id; await db.guardarLinea(c); render(); }
     else if (a === "invertirj") { const l = S.d.lineas.find(x => x.id === S.selLinea); if (!l) return; const d = l.debe; l.debe = l.haber; l.haber = d; await db.guardarLinea(l); render(); }
@@ -1224,7 +1275,8 @@ document.addEventListener("click", async e => {
         const fecha = g.map(x => x.fecha).sort()[0];
         const ap = g.flatMap(x => expandirLinea(x).ap); // cada línea con su contrapartida, IVA y retención
         for (const a2 of ap) if (!S.d.cuentas.some(c => c.codigo === a2.cuenta)) await asegurarCuenta(a2.cuenta, nombreBase(a2.cuenta));
-        await db.crearAsiento(S.emp.id, fecha, g.find(x => x.descripcion)?.descripcion || doc, ap, "diario:" + S.libro, doc);
+        const aid = await db.crearAsiento(S.emp.id, fecha, g.find(x => x.descripcion)?.descripcion || doc, ap, "diario:" + S.libro, doc);
+        for (const x of g) if (esFactJ(x)) await facturaDeLinea(x, aid); // cada línea de un diario de facturas crea también su factura (pagos pendientes, libros de IVA y modelos)
       }
       const lote = S.d.libros.find(x => x.numero === S.libro);
       await db.borrarLineas(S.emp.id, S.libro); if (lote) await db.borrarLibro(lote.id);
