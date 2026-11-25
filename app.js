@@ -92,7 +92,7 @@ if (LOCAL) {
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [] }, pagoF: null, selPend: null, ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -150,10 +150,11 @@ const CATEG = { 1: "Pasivo / PN", 2: "Activo", 3: "Activo", 4: "Mixta", 5: "Mixt
 const NAV = [
   ["Libro mayor", [["cuentas", "Cuentas principales"], ["diario", "Diarios generales"], ["mayor", "Transacciones del libro mayor"], ["sumas", "Balance de comprobación"], ["estados", "Estados financieros"]]],
   ["Cuentas a cobrar", [["clientes", "Todos los clientes"], ["fventa", "Facturas de cliente"], ["cobros", "Cobros pendientes"]]],
-  ["Cuentas a pagar", [["proveedores", "Todos los proveedores"], ["fcompra", "Facturas de proveedor"], ["pagos", "Pagos pendientes"]]]
+  ["Cuentas a pagar", [["proveedores", "Todos los proveedores"], ["fcompra", "Facturas de proveedor"], ["pagos", "Pagos pendientes"]]],
+  ["Impuestos", [["libroiva", "Libros de IVA"], ["m303", "Modelo 303"], ["m347", "Modelo 347"]]]
 ];
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", libroiva: "Libros de IVA", m303: "Modelo 303", m347: "Modelo 347" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -447,6 +448,101 @@ async function registrarPago(f, fecha, importe, banco) {
   S.pagoF = null; await recargar();
 }
 
+/* ---------------- Impuestos: libros de IVA y modelos ---------------- */
+const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const PERIODOS = [["1T", "Primer trimestre", 1, 3], ["2T", "Segundo trimestre", 4, 6], ["3T", "Tercer trimestre", 7, 9], ["4T", "Cuarto trimestre", 10, 12], ["0A", "Año completo", 1, 12], ...MESES.map((m, i) => ["M" + String(i + 1).padStart(2, "0"), m, i + 1, i + 1])];
+function rangoPeriodo(cod) {
+  const p = PERIODOS.find(x => x[0] === cod) || PERIODOS[0], y = S.ej, d2 = n => String(n).padStart(2, "0");
+  const fin = new Date(y, p[3], 0).getDate();
+  return [`${y}-${d2(p[2])}-01`, `${y}-${d2(p[3])}-${d2(fin)}`];
+}
+const fechaIva = f => f.fecha_iva || f.fecha_registro || "";
+function facturasIva(tipo, per) {
+  const [d, h] = rangoPeriodo(per);
+  return S.d.facturas.filter(f => f.tipo === tipo && estadoF(f) === "Registrado" && fechaIva(f) >= d && fechaIva(f) <= h).sort((a, b) => fechaIva(a).localeCompare(fechaIva(b)) || a.numero.localeCompare(b.numero));
+}
+function desgloseF(f) { // base y cuota por tipo de IVA de una factura
+  const m = new Map([[0, 0], [4, 0], [10, 0], [21, 0]]);
+  lineasF(f).forEach(l => { const k = +l.iva || 0; m.set(k, r2((m.get(k) || 0) + r2((+l.cantidad || 0) * (+l.precio || 0)))); });
+  const out = {}; let total = 0;
+  m.forEach((b, k) => { const c = r2(b * k / 100); out[k] = { base: b, cuota: c }; total = r2(total + b + c); });
+  return { ...out, total };
+}
+const nCSV = n => String(r2(n)).replace(".", ",");
+function descargarCSV(nombre, filas) {
+  const q = c => { const s = String(c ?? ""); return /^-?\d+(,\d+)?$/.test(s) ? s : `"${s.replace(/"/g, '""')}"`; }; // números sin comillas para que Excel los lea como números
+  const csv = "﻿" + filas.map(r => r.map(q).join(";")).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+}
+const nomPer = () => (PERIODOS.find(x => x[0] === S.periodo) || PERIODOS[0])[1] + " " + S.ej;
+const selPeriodo = () => `<label>Período<select id="per">${PERIODOS.map(p => `<option value="${p[0]}" ${p[0] === S.periodo ? "selected" : ""}>${p[1]}</option>`).join("")}</select></label>`;
+
+function datosLibro() {
+  const cli = S.libroIva === "V", L = facturasIva(S.libroIva, S.periodo);
+  const cab = ["Fecha", "Registro", "Nº factura", "NIF", "Nombre", "Base 0 %", "Base 4 %", "Cuota 4 %", "Base 10 %", "Cuota 10 %", "Base 21 %", "Cuota 21 %", "Total"];
+  const tot = [0, 0, 0, 0, 0, 0, 0, 0]; // base0, b4, c4, b10, c10, b21, c21, total
+  const filas = L.map(f => { const t = terPorId(f.tercero_id) || {}, d = desgloseF(f);
+    const v = [d[0].base, d[4].base, d[4].cuota, d[10].base, d[10].cuota, d[21].base, d[21].cuota, d.total]; v.forEach((x, i) => { tot[i] = r2(tot[i] + x); });
+    return [fechaIva(f), f.numero, cli ? f.numero : (f.num_externo || ""), t.cif || "", t.nombre || "", ...v]; });
+  return { cab, filas, tot: ["", "", "", "", "Totales", ...tot] };
+}
+V.libroiva = () => {
+  const cli = S.libroIva === "V", D = datosLibro();
+  const acc = btn("exportar", "Exportar a Excel (CSV)", "", !D.filas.length);
+  const fila = r => `<tr>${r.map((c, i) => i >= 5 ? `<td class="n">${sal(c)}</td>` : `<td>${esc(c)}</td>`).join("")}</tr>`;
+  const baseT = r2(D.tot[5] + D.tot[6] + D.tot[8] + D.tot[10]), cuotaT = r2(D.tot[7] + D.tot[9] + D.tot[11]);
+  return pagina("Libros de IVA", acc, `<div class="pagina"><div class="lista"><table><tr>${D.cab.map((c, i) => `<th class="${i >= 5 ? "n" : ""}">${c}</th>`).join("")}</tr>${D.filas.map(fila).join("") || `<tr><td colspan="13" class="vacio">No hay facturas registradas en este período.</td></tr>`}${D.filas.length ? `<tr class="tot">${D.tot.map((c, i) => i >= 5 ? `<td class="n">${eur(c)}</td>` : `<td>${esc(c)}</td>`).join("")}</tr>` : ""}</table></div>
+   <aside class="factbox"><h3>Resumen ${cli ? "repercutido" : "soportado"}</h3><dl><dt>Período</dt><dd>${esc(nomPer())}</dd><dt>Facturas</dt><dd>${D.filas.length}</dd><dt>Base imponible</dt><dd>${eur(baseT)}</dd><dt>Cuota de IVA</dt><dd>${eur(cuotaT)}</dd><dt>Total</dt><dd>${eur(D.tot[12])}</dd></dl></aside></div>`,
+    { tabs: ["Libro registro"], vista: cli ? "IVA repercutido (facturas emitidas)" : "IVA soportado (facturas recibidas)", filtros: `<label>Libro<select id="tl"><option value="V" ${cli ? "selected" : ""}>Repercutido (ventas)</option><option value="C" ${cli ? "" : "selected"}>Soportado (compras)</option></select></label>${selPeriodo()}` });
+};
+
+function datos303() {
+  const V_ = facturasIva("V", S.periodo), C_ = facturasIva("C", S.periodo);
+  const dev = { 0: 0, 4: [0, 0], 10: [0, 0], 21: [0, 0] }; let ex0 = 0;
+  V_.forEach(f => { const d = desgloseF(f); ex0 = r2(ex0 + d[0].base); [4, 10, 21].forEach(k => { dev[k][0] = r2(dev[k][0] + d[k].base); dev[k][1] = r2(dev[k][1] + d[k].cuota); }); });
+  let sBase = 0, sCuota = 0, c0 = 0;
+  C_.forEach(f => { const d = desgloseF(f); c0 = r2(c0 + d[0].base); [4, 10, 21].forEach(k => { sBase = r2(sBase + d[k].base); sCuota = r2(sCuota + d[k].cuota); }); });
+  const totDev = r2(dev[4][1] + dev[10][1] + dev[21][1]);
+  return { dev, ex0, sBase, sCuota, c0, totDev, resultado: r2(totDev - sCuota), nV: V_.length, nC: C_.length };
+}
+V.m303 = () => {
+  const D = datos303(), c = (cas, txt, v, extra = "") => `<tr><td style="width:4rem"><b>${cas}</b></td><td>${txt}</td><td class="n">${extra}</td><td class="n">${eur(v)}</td></tr>`;
+  const acc = btn("exportar", "Exportar a Excel (CSV)");
+  return pagina("Modelo 303", acc, `<div class="lista"><p class="aviso">Cálculo orientativo a partir de las facturas registradas (régimen general, por fecha de IVA). No sustituye a la presentación en la AEAT: no incluye inversión del sujeto pasivo, adquisiciones intracomunitarias, importaciones ni prorrata.</p>
+  <h3>IVA devengado</h3><table><tr><th>Casilla</th><th>Concepto</th><th class="n">Base / tipo</th><th class="n">Importe</th></tr>
+  ${c("01 · 03", "Régimen general 4 %: base imponible y cuota", D.dev[4][1], eur(D.dev[4][0]))}${c("04 · 06", "Régimen general 10 %: base imponible y cuota", D.dev[10][1], eur(D.dev[10][0]))}${c("07 · 09", "Régimen general 21 %: base imponible y cuota", D.dev[21][1], eur(D.dev[21][0]))}
+  <tr class="tot"><td>27</td><td>Total cuota devengada</td><td></td><td class="n">${eur(D.totDev)}</td></tr></table>
+  <h3 style="margin-top:1.2rem">IVA deducible</h3><table><tr><th>Casilla</th><th>Concepto</th><th class="n">Base</th><th class="n">Cuota</th></tr>
+  <tr><td><b>28 · 29</b></td><td>Cuotas soportadas en operaciones interiores corrientes</td><td class="n">${eur(D.sBase)}</td><td class="n">${eur(D.sCuota)}</td></tr>
+  <tr class="tot"><td>45</td><td>Total a deducir</td><td></td><td class="n">${eur(D.sCuota)}</td></tr></table>
+  <h3 style="margin-top:1.2rem">Resultado</h3><table><tr class="tot"><td style="width:4rem">46</td><td>Diferencia (27 − 45)</td><td class="n">${eur(D.resultado)}</td></tr></table>
+  <p class="${D.resultado > 0 ? "ko" : "ok"}">${D.resultado > 0 ? "A ingresar" : D.resultado < 0 ? "A compensar o devolver" : "Sin resultado"}: ${eur(Math.abs(D.resultado))} €</p>
+  <p style="color:var(--tx2)">Operaciones a tipo 0 %/exentas: ventas ${eur(D.ex0)} € · compras ${eur(D.c0)} € (informativo). Facturas incluidas: ${D.nV} emitidas y ${D.nC} recibidas.</p></div>`,
+    { tabs: ["Autoliquidación"], vista: nomPer(), filtros: selPeriodo() });
+};
+
+function datos347() {
+  const m = new Map();
+  S.d.facturas.filter(f => estadoF(f) === "Registrado" && fechaIva(f).startsWith(String(S.ej))).forEach(f => {
+    const q = Math.ceil(+fechaIva(f).slice(5, 7) / 3) - 1, k = f.tipo + "|" + f.tercero_id; const o = m.get(k) || { tipo: f.tipo, t: terPorId(f.tercero_id) || {}, q: [0, 0, 0, 0] };
+    o.q[q] = r2(o.q[q] + desgloseF(f).total); m.set(k, o);
+  });
+  const filas = [...m.values()].map(o => ({ ...o, total: r2(o.q.reduce((a, x) => a + x, 0)) })).filter(o => Math.abs(o.total) > 3005.06).sort((a, b) => (a.t.nombre || "").localeCompare(b.t.nombre || ""));
+  return { cli: filas.filter(o => o.tipo === "V"), pro: filas.filter(o => o.tipo === "C") };
+}
+V.m347 = () => {
+  const D = datos347(), tabla = (tit, L) => `<h3>${tit}</h3><table><tr><th>NIF</th><th>Nombre</th><th class="n">1T</th><th class="n">2T</th><th class="n">3T</th><th class="n">4T</th><th class="n">Total anual</th></tr>
+   ${L.map(o => `<tr><td>${esc(o.t.cif || "")}</td><td>${esc(o.t.nombre || "")}</td>${o.q.map(x => `<td class="n">${sal(x)}</td>`).join("")}<td class="n">${eur(o.total)}</td></tr>`).join("") || `<tr><td colspan="7" class="vacio">Ninguna operación supera 3.005,06 €.</td></tr>`}</table>`;
+  return pagina("Modelo 347", btn("exportar", "Exportar a Excel (CSV)", "", !(D.cli.length + D.pro.length)), `<div class="lista"><p class="aviso">Operaciones con terceros que superan 3.005,06 € en el año (IVA incluido, por fecha de IVA). Importes por trimestre. No incluye cobros en metálico ni operaciones de inmuebles, y no sustituye a la presentación en la AEAT.</p>
+   ${tabla("Clientes", D.cli)}<div style="height:1.2rem"></div>${tabla("Proveedores", D.pro)}</div>`, { tabs: ["Declaración anual"], vista: "Ejercicio " + S.ej });
+};
+function exportarActual() {
+  const base = (S.emp.nombre || "empresa").replace(/[^\w]+/g, "_") + "_";
+  if (S.vista === "libroiva") { const D = datosLibro(); descargarCSV(base + (S.libroIva === "V" ? "IVA_repercutido_" : "IVA_soportado_") + S.periodo + "_" + S.ej + ".csv", [D.cab, ...D.filas.map(r => r.map((c, i) => i >= 5 ? nCSV(c) : c)), D.tot.map((c, i) => i >= 5 ? nCSV(c) : c)]); }
+  else if (S.vista === "m303") { const D = datos303(); descargarCSV(base + "modelo303_" + S.periodo + "_" + S.ej + ".csv", [["Casilla", "Concepto", "Base", "Importe"], ["01/03", "Devengado 4 %", nCSV(D.dev[4][0]), nCSV(D.dev[4][1])], ["04/06", "Devengado 10 %", nCSV(D.dev[10][0]), nCSV(D.dev[10][1])], ["07/09", "Devengado 21 %", nCSV(D.dev[21][0]), nCSV(D.dev[21][1])], ["27", "Total cuota devengada", "", nCSV(D.totDev)], ["28/29", "Deducible operaciones interiores corrientes", nCSV(D.sBase), nCSV(D.sCuota)], ["45", "Total a deducir", "", nCSV(D.sCuota)], ["46", "Diferencia", "", nCSV(D.resultado)]]); }
+  else if (S.vista === "m347") { const D = datos347(), f = (t, L) => L.map(o => [t, o.t.cif || "", o.t.nombre || "", ...o.q.map(nCSV), nCSV(o.total)]); descargarCSV(base + "modelo347_" + S.ej + ".csv", [["Tipo", "NIF", "Nombre", "1T", "2T", "3T", "4T", "Total"], ...f("Cliente", D.cli), ...f("Proveedor", D.pro)]); }
+}
+
 /* ---------------- Render y eventos ---------------- */
 function render() {
   if (!S.empresas.length && !S.emp) return renderEmpresaNueva();
@@ -491,6 +587,8 @@ document.addEventListener("change", async e => {
     else if (t.id === "ej") { S.ej = +t.value; render(); }
     else if (t.id === "cm") { S.filtroCta = t.value; render(); }
     else if (t.id === "fp") { S.filtroPend = t.value; render(); }
+    else if (t.id === "per") { S.periodo = t.value; render(); }
+    else if (t.id === "tl") { S.libroIva = t.value; render(); }
     else if (t.id === "busca") { const k = Object.keys(NOMBRES).find(x => NOMBRES[x].toLowerCase() === t.value.trim().toLowerCase()); if (k) { S.vista = k; render(); } }
     else if (t.dataset.l !== undefined) { leerForm(); render(); }
     else if (t.dataset.f !== undefined) {
@@ -582,6 +680,7 @@ document.addEventListener("click", async e => {
     }
     else if (a === "delasiento") { const as = S.d.asientos.find(x => x.id === S.selAs); if (as && confirm("¿Eliminar el asiento " + as.numero + " (" + as.concepto + ")? No se puede deshacer.")) { await db.borrarAsiento(as.id); S.selAs = null; await recargar(); } }
     /* clientes y proveedores */
+    else if (a === "exportar") { exportarActual(); }
     else if (a === "selpend") { S.selPend = b.dataset.id; S.pagoF = null; render(); }
     else if (a === "abrirpago") { S.pagoF = S.selPend; render(); }
     else if (a === "cancelarpago") { S.pagoF = null; render(); }
