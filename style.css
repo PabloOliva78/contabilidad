@@ -11,6 +11,7 @@ a:hover{text-decoration:underline}
 .fo-top b{font-weight:600;white-space:nowrap}
 .fo-top button{background:transparent;color:#fff;border:0;cursor:pointer;padding:.4rem .7rem;border-radius:2px;font-size:1.05rem}
 .fo-top button:hover{background:rgba(255,255,255,.18)}
+.fo-top .ver{background:rgba(255,255,255,.2);border-radius:3px;padding:.05rem .45rem;font-size:.85rem;white-space:nowrap}
 .fo-top .busca{flex:0 1 26rem;margin:0 auto 0 1rem}
 .fo-top .busca input{width:100%;border:1px solid #ffffff55;background:#fff;color:var(--tx);border-radius:2px;padding:.28rem .6rem}
 .fo-top select{background:#e6f1fb;color:var(--az-d);border:0;border-radius:2px;padding:.28rem .4rem;font-weight:600;max-width:20rem}
