@@ -56,7 +56,7 @@ a:hover{text-decoration:underline}
 .fo-ap button{background:none;border:0;cursor:pointer;padding:.38rem .6rem;border-radius:2px;color:var(--tx);white-space:nowrap}
 .fo-ap button:hover:not(:disabled){background:var(--hov)}
 .fo-ap button:disabled{color:#a19f9d;cursor:default}
-.fo-ap button.p{color:var(--lnk);font-weight:600}
+.fo-ap button.p{color:var(--lnk);font-weight:600;background:none;border:0}
 .fo-ap .sep{width:1px;height:1.2rem;background:var(--bd);margin:0 .3rem}
 .fo-ap select,.fo-ap input{border:1px solid var(--bd);border-radius:2px;padding:.22rem .4rem;background:#fff}
 .fo-hd{padding:.5rem 1rem 0}
@@ -117,6 +117,16 @@ button.d{color:var(--ko);background:none;border:0;cursor:pointer}
 .login{max-width:340px;margin:12vh auto}
 .login input{width:100%;margin:.3rem 0}
 .aviso{background:#fff4ce;border:1px solid #f0d97a;padding:.4rem .8rem;font-size:.85rem}
+/* ficha de cliente / proveedor con secciones desplegables */
+.fsec{border:1px solid var(--bd);margin-bottom:.7rem;background:#fff}
+.fh{display:block;padding:.5rem .8rem;font-weight:600;color:var(--tx);cursor:pointer;background:#faf9f8}
+.fh:hover{text-decoration:none;background:var(--hov)}
+.fb{padding:.7rem 1rem 1rem;overflow-x:auto}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.4rem 2rem}
+.fcol h4{font-size:.8rem;color:var(--tx2);margin:.2rem 0 .5rem;font-weight:600;letter-spacing:.02em}
+.fld{display:flex;flex-direction:column;font-size:.85rem;color:var(--tx2);margin-bottom:.55rem;gap:.15rem}
+.fld input,.fld select{color:var(--tx);width:100%}
+.chk{display:flex;gap:.4rem;align-items:center;margin-bottom:.45rem}
 /* diario general editable */
 table.editable td{padding:.12rem .2rem}
 table.editable input{width:100%;border:1px solid transparent;background:transparent;padding:.22rem .3rem}

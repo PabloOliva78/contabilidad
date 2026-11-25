@@ -149,7 +149,7 @@ const db = new Proxy({}, { get: (_, m) => (...a) => m === "empresas" ? listarEmp
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", navMod: "", navCerr: {}, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", navMod: "", navCerr: {}, fichaCerr: {}, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -407,21 +407,68 @@ function vistaTerceros(tipo) {
   const cli = tipo === "C";
   const L = S.d.terceros.filter(t => t.tipo === tipo).sort((a, b) => a.codigo.localeCompare(b.codigo));
   const sel = L.find(t => t.id === S.selTer);
-  const filas = L.map(t => `<tr data-sel class="${t.id === S.selTer ? "sel" : ""}" data-a="selter" data-id="${t.id}"><td><a data-a="editter" data-id="${t.id}">${esc(t.codigo)}</a></td><td>${esc(t.nombre)}</td><td>${esc(t.cif || "")}</td><td>${esc(t.grupo_iva)}</td><td>${esc(t.telefono || "")}</td><td class="n">${sal(saldoTer(t))}</td></tr>`).join("");
+  const filas = L.map(t => `<tr data-sel class="${t.id === S.selTer ? "sel" : ""}" data-a="selter" data-id="${t.id}"><td><a data-a="editter" data-id="${t.id}">${esc(t.codigo)}</a></td><td>${esc(t.nombre)}</td><td>${esc(t.cif || "")}</td><td>${esc((t.ficha || {}).pais || "")}</td><td>${esc(t.grupo_iva)}</td><td>${esc(((CONDICIONES.find(c => c[0] === ((t.ficha || {}).pago || {}).cond) || [])[1]) || "")}</td><td>${esc(t.telefono || "")}</td><td class="n">${sal(saldoTer(t))}</td></tr>`).join("");
   const acc = btn("nuevoter", "+ Nuevo", `data-t="${tipo}"`) + btn("editter", "Editar", `data-id="${sel ? sel.id : ""}"`, !sel) + btn("delter", "Eliminar", "", !sel) + SEP + btn("verter", "Transacciones", "", !sel) + SEP + btn("nuevafact", cli ? "Nueva factura de cliente" : "Nueva factura de proveedor", `data-t="${cli ? "V" : "C"}" data-ter="${sel ? sel.id : ""}"`);
-  const e = S.terEdit && S.terEdit.tipo === tipo ? S.terEdit : null;
-  const form = e ? `<div class="card"><b>${S.d.terceros.some(t => t.id === e.id) ? "Editar" : "Nuevo"} ${cli ? "cliente" : "proveedor"}</b><div class="row" style="margin-top:.5rem">
-    <input id="te-codigo" placeholder="Cuenta" size="10" value="${esc(e.codigo)}"><input id="te-nombre" placeholder="Nombre" size="34" value="${esc(e.nombre)}"><input id="te-cif" placeholder="NIF / CIF" size="12" value="${esc(e.cif || "")}">
-    <select id="te-grupo">${["NAC", "UE", "EXT"].map(g => `<option ${g === e.grupo_iva ? "selected" : ""}>${g}</option>`).join("")}</select>
-    <input id="te-tel" placeholder="Teléfono" size="12" value="${esc(e.telefono || "")}"><input id="te-email" placeholder="Correo electrónico" size="22" value="${esc(e.email || "")}">
-    <input id="te-cuenta" list="dl" placeholder="Cuenta de 9 dígitos (automática)" size="22" value="${esc(e.cuenta || "")}">
-    <button class="p" data-a="guardarter">Guardar</button><button data-a="cancelter">Cancelar</button></div>
-    <datalist id="dl">${optsCuentas()}</datalist></div>` : "";
+  if (S.terEdit && S.terEdit.tipo === tipo) return fichaTercero(tipo);
   const fs = sel ? S.d.facturas.filter(f => f.tercero_id === sel.id) : [];
   const fact = fs.filter(f => estadoF(f) === "Registrado" && (f.fecha_registro || "").startsWith(String(S.ej))).reduce((a, f) => a + totalesF(lineasF(f)).total, 0);
-  return pagina(cli ? "Todos los clientes" : "Todos los proveedores", acc, `${form}
-  <div class="pagina"><div class="lista"><table><tr><th>${cli ? "Cuenta de cliente" : "Cuenta de proveedor"}</th><th>Nombre</th><th>NIF / CIF</th><th>Grupo de impuestos</th><th>Teléfono</th><th class="n">Saldo</th></tr>${filas || `<tr><td colspan="6" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div>
+  return pagina(cli ? "Todos los clientes" : "Todos los proveedores", acc, `
+  <div class="pagina"><div class="lista"><table><tr><th>${cli ? "Cuenta de cliente" : "Cuenta de proveedor"}</th><th>Nombre</th><th>NIF / CIF</th><th>País</th><th>Grupo de impuestos</th><th>Condiciones de pago</th><th>Teléfono</th><th class="n">Saldo</th></tr>${filas || `<tr><td colspan="8" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div>
   <aside class="factbox"><h3>Estadísticas ${cli ? "del cliente" : "del proveedor"}</h3>${sel ? `<dl><dt>Cuenta</dt><dd>${esc(sel.codigo)}</dd><dt>Saldo</dt><dd>${eur(saldoTer(sel))}</dd><dt>Facturas abiertas</dt><dd>${fs.filter(f => estadoF(f) === "Abierto").length}</dd><dt>Facturado ${S.ej}</dt><dd>${eur(fact)}</dd><dt>Correo</dt><dd>${esc(sel.email || "")}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione ${cli ? "un cliente" : "un proveedor"}.</p>`}</aside></div>`);
+}
+/* Ficha de cliente / proveedor, con secciones como D365: General, Información de contacto, País y direcciones, Condiciones de pago, Factura y entrega */
+const TIPOS_CONTACTO = ["Teléfono", "Móvil", "Fax", "Correo electrónico", "Correo electrónico documentos técnicos", "Sitio web", "Otro"];
+const PROPOSITOS_DIR = ["Negocio", "Facturación", "Entrega", "Otro"];
+const CONDICIONES = [["CONT", "Contado", 0], ["7", "7 días", 7], ["15", "15 días", 15], ["30", "30 días", 30], ["45", "45 días", 45], ["60", "60 días", 60], ["75", "75 días", 75], ["90", "90 días", 90], ["120", "120 días", 120]];
+const FORMAS_PAGO = ["Transferencia", "Recibo domiciliado", "Confirming", "Cheque", "Pagaré", "Efectivo", "Tarjeta"];
+const INCOTERMS = ["EXW", "FCA", "CPT", "CIP", "DAP", "DPU", "DDP", "FAS", "FOB", "CFR", "CIF"];
+const PAISES = [["ES", "España"], ["PT", "Portugal"], ["FR", "Francia"], ["DE", "Alemania"], ["IT", "Italia"], ["NL", "Países Bajos"], ["BE", "Bélgica"], ["LU", "Luxemburgo"], ["IE", "Irlanda"], ["AT", "Austria"], ["GR", "Grecia"], ["PL", "Polonia"], ["RO", "Rumanía"], ["BG", "Bulgaria"], ["HU", "Hungría"], ["CZ", "Chequia"], ["SK", "Eslovaquia"], ["SE", "Suecia"], ["DK", "Dinamarca"], ["FI", "Finlandia"], ["HR", "Croacia"], ["SI", "Eslovenia"], ["LT", "Lituania"], ["LV", "Letonia"], ["EE", "Estonia"], ["CY", "Chipre"], ["MT", "Malta"], ["GB", "Reino Unido"], ["AD", "Andorra"], ["CH", "Suiza"], ["MA", "Marruecos"], ["TR", "Turquía"], ["US", "Estados Unidos"], ["CN", "China"], ["IN", "India"], ["BR", "Brasil"], ["MX", "México"]];
+const getPath = (o, p) => p.split(".").reduce((a, k) => (a == null ? undefined : a[k]), o);
+const setPath = (o, p, v) => { const ks = p.split("."); let a = o; ks.slice(0, -1).forEach(k => { a[k] = a[k] || {}; a = a[k]; }); a[ks[ks.length - 1]] = v; };
+const terNuevo = tp => ({ id: uid(), tipo: tp, codigo: siguienteTer(tp), nombre: "", cif: "", grupo_iva: "NAC", telefono: "", email: "", cuenta: "", ficha: { tipoPersona: "Organización", pais: "ES", idioma: "es", pago: {}, fact: {}, ent: {} }, contactos: [], direcciones: [] });
+const terClon = t => { const c = JSON.parse(JSON.stringify(t)); c.ficha = c.ficha || {}; ["pago", "fact", "ent"].forEach(k => { c.ficha[k] = c.ficha[k] || {}; }); c.ficha.pais = c.ficha.pais || "ES"; c.contactos = c.contactos || []; c.direcciones = c.direcciones || []; return c; };
+const optsHtml = (lista, v) => `<option value=""></option>` + lista.map(x => { const [k, n] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(k)}" ${String(k) === String(v ?? "") ? "selected" : ""}>${esc(n)}</option>`; }).join("");
+function campo(et, path, o = {}) {
+  const v = getPath(S.terEdit, path);
+  if (o.check) return `<label class="chk"><input type="checkbox" data-tf="${path}" ${v ? "checked" : ""}> ${et}</label>`;
+  if (o.opts) return `<label class="fld">${et}<select data-tf="${path}">${optsHtml(o.opts, v)}</select></label>`;
+  return `<label class="fld">${et}<input data-tf="${path}" type="${o.tipo || "text"}" value="${esc(v ?? "")}" ${o.list ? `list="${o.list}"` : ""} ${o.ph ? `placeholder="${esc(o.ph)}"` : ""}></label>`;
+}
+const secFicha = (id, titulo, cuerpo) => { const cerr = S.fichaCerr[id]; return `<div class="fsec"><a class="fh" data-a="fichasec" data-id="${id}">${cerr ? "▸" : "▾"} ${titulo}</a>${cerr ? "" : `<div class="fb">${cuerpo}</div>`}</div>`; };
+function tablaLista(nombre, cols) { // lista editable (contactos o direcciones); cols: [clave, etiqueta, opciones opcionales]
+  const L = S.terEdit[nombre];
+  return `<table class="editable"><tr>${cols.map(c => `<th>${c[1]}</th>`).join("")}<th>Principal</th><th></th></tr>
+   ${L.map((r, i) => `<tr>${cols.map(c => `<td>${c[2] ? `<select data-tl="${nombre}" data-i="${i}" data-k="${c[0]}">${optsHtml(c[2], r[c[0]])}</select>` : `<input data-tl="${nombre}" data-i="${i}" data-k="${c[0]}" value="${esc(r[c[0]] ?? "")}">`}</td>`).join("")}<td><input type="checkbox" data-tl="${nombre}" data-i="${i}" data-k="principal" ${r.principal ? "checked" : ""}></td><td><button class="d" data-a="deltl" data-l="${nombre}" data-i="${i}">✕</button></td></tr>`).join("")}</table>
+   <div class="row" style="margin-top:.4rem"><button data-a="addtl" data-l="${nombre}">+ Agregar</button></div>`;
+}
+function fichaTercero(tipo) {
+  const e = S.terEdit, cli = tipo === "C", otros = S.d.terceros.filter(t => t.tipo === tipo && t.id !== e.id);
+  const acc = `<button class="p" data-a="guardarter">Guardar</button>` + btn("cancelter", "Cancelar");
+  const general = `<div class="fgrid">
+    <div class="fcol"><h4>${cli ? "CLIENTE" : "PROVEEDOR"}</h4>${campo("Cuenta", "codigo")}${campo("Tipo", "ficha.tipoPersona", { opts: ["Organización", "Persona"] })}${campo("Nombre", "nombre")}${campo("Nombre de búsqueda", "ficha.busqueda")}${campo(cli ? "Grupo de clientes" : "Grupo de proveedores", "ficha.grupo")}${campo("Grupo de clasificación", "ficha.clasificacion")}${campo("Prioridad de pago", "ficha.prioridad")}</div>
+    <div class="fcol"><h4>DETALLES DE LA ORGANIZACIÓN</h4>${campo("Número de empleados", "ficha.empleados", { tipo: "number" })}${campo("Número de organización", "ficha.org_num")}${campo("Código ABC", "ficha.abc", { opts: ["Ninguno", "A", "B", "C"] })}${campo("Número DUNS", "ficha.duns")}</div>
+    <div class="fcol"><h4>OTRA INFORMACIÓN</h4>${campo("Libretas de direcciones", "ficha.libretas")}${campo("Idioma", "ficha.idioma")}${campo("Nombre fonético", "ficha.fonetico")}${campo("Conocido como", "ficha.conocido")}<h4>GESTIÓN DE COMUNICACIONES RETO</h4>${campo("Código ROPO", "ficha.ropo")}</div></div>`;
+  const contacto = tablaLista("contactos", [["desc", "Descripción"], ["tipo", "Tipo", TIPOS_CONTACTO], ["valor", "Dirección y número de contacto"], ["ext", "Extensión"]]);
+  const pais = `<div class="fgrid"><div class="fcol">${campo("País/región", "ficha.pais", { opts: PAISES })}${campo("Estado / provincia", "ficha.estado")}${campo("Número de identificación (id. gubernamental)", "ficha.id_gub")}</div></div>
+    <h4 style="margin:1rem 0 .3rem">DIRECCIONES</h4>${tablaLista("direcciones", [["desc", "Nombre o descripción"], ["dir", "Dirección"], ["cp", "Código postal"], ["poblacion", "Población"], ["provincia", "Provincia"], ["pais", "País", PAISES], ["proposito", "Propósito", PROPOSITOS_DIR]])}`;
+  const pago = `<div class="fgrid"><div class="fcol"><h4>PAGO</h4>${campo("Condiciones de pago", "ficha.pago.cond", { opts: CONDICIONES.map(c => [c[0], c[1]]) })}${campo("Forma de pago", "ficha.pago.forma", { opts: FORMAS_PAGO })}${campo("Especificación del pago", "ficha.pago.esp")}${campo("Día de pago (día del mes)", "ficha.pago.dia", { tipo: "number" })}${campo("Cuenta bancaria (IBAN)", "ficha.pago.banco")}</div>
+    <div class="fcol"><h4>DESCUENTO POR PRONTO PAGO</h4>${campo("Descuento (%)", "ficha.pago.dto_pct", { tipo: "number" })}${campo("Días para el descuento", "ficha.pago.dto_dias", { tipo: "number" })}${campo("Días de base de las condiciones de pago", "ficha.pago.base", { tipo: "number" })}</div>
+    <div class="fcol"><h4>OPCIONES</h4>${campo("Multivencimientos", "ficha.pago.multi", { check: true })}${campo("Permitir a cuenta", "ficha.pago.a_cuenta", { check: true })}${campo("Apto para plazos", "ficha.pago.plazos", { check: true })}${campo("Notas", "ficha.pago.notas")}</div></div>
+    <p style="color:var(--tx2);margin:.5rem 0 0">Con las condiciones de pago (y el día de pago) el vencimiento de cada factura se calcula solo.</p>`;
+  const fyE = `<div class="fgrid"><div class="fcol"><h4>FACTURA</h4>${campo("Cuenta de facturación", "ficha.fact.cuenta_fact", { opts: otros.map(t => [t.id, t.codigo + " · " + t.nombre]) })}${campo("Dirección de la factura", "ficha.fact.dir_fact", { opts: e.direcciones.map((d, i) => [String(i), d.desc || d.dir || "Dirección " + (i + 1)]) })}${campo("Grupo de secuencias numéricas", "ficha.fact.seq")}${campo("Plantilla de factura", "ficha.fact.plantilla")}</div>
+    <div class="fcol"><h4>ENTREGA</h4>${campo("Zona de porte", "ficha.ent.zona")}${campo("Condiciones de entrega", "ficha.ent.cond", { opts: INCOTERMS })}${campo("Modo de entrega", "ficha.ent.modo")}${campo("Motivo de la entrega", "ficha.ent.motivo")}${campo("Código de destino", "ficha.ent.destino")}${campo("Calendario de recepción", "ficha.ent.calendario")}</div>
+    <div class="fcol"><h4>IMPUESTOS Y CONTABILIDAD</h4>${campo("NIF", "cif")}${campo("Grupo de impuestos", "grupo_iva", { opts: [["NAC", "NAC · Nacional"], ["UE", "UE · Intracomunitario"], ["EXT", "EXT · Terceros países"]] })}${campo("Cuenta contable (9 dígitos)", "cuenta", { list: "dl", ph: "automática" })}</div></div>`;
+  return pagina(cli ? "Cliente" : "Proveedor", acc, `<datalist id="dl">${optsCuentas()}</datalist>${secFicha("gen", "General", general)}${secFicha("con", "Información de contacto", contacto)}${secFicha("pais", "País y direcciones", pais)}${secFicha("pago", "Condiciones de pago", pago)}${secFicha("fye", "Factura y entrega", fyE)}`,
+    { tabs: ["Ficha"], vista: e.codigo + (e.nombre ? " : " + e.nombre : "") });
+}
+// vencimiento = fecha de la factura + días de las condiciones de pago; si hay día de pago, se pasa al siguiente día de pago
+function calcVenc(t, fecha) {
+  const p = ((t || {}).ficha || {}).pago || {}, c = CONDICIONES.find(x => x[0] === p.cond);
+  if (!c || !fecha) return "";
+  const d = new Date(fecha + "T00:00:00"); d.setDate(d.getDate() + c[2]);
+  const dia = Math.min(31, Math.max(0, Math.round(+p.dia || 0)));
+  if (dia) { const ult = (y, m) => new Date(y, m + 1, 0).getDate(); let y = d.getFullYear(), m = d.getMonth(); let obj = new Date(y, m, Math.min(dia, ult(y, m))); if (obj < d) { m += 1; obj = new Date(y, m, Math.min(dia, ult(y, m))); } return obj.getFullYear() + "-" + String(obj.getMonth() + 1).padStart(2, "0") + "-" + String(obj.getDate()).padStart(2, "0"); }
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 V.clientes = () => vistaTerceros("C");
 V.proveedores = () => vistaTerceros("P");
@@ -866,6 +913,12 @@ document.addEventListener("change", async e => {
   const t = e.target;
   try {
     if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
+    else if (t.dataset.tf !== undefined) { setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.type === "number" ? t.value : t.value); }
+    else if (t.dataset.tl !== undefined) {
+      const L = S.terEdit[t.dataset.tl], r = L[+t.dataset.i], k = t.dataset.k;
+      r[k] = t.type === "checkbox" ? t.checked : t.value;
+      if (k === "principal" && t.checked) { L.forEach((x, j) => { if (j !== +t.dataset.i) x.principal = false; }); render(); }
+    }
     else if (t.id === "emp") {
       const e2 = S.empresas.find(x => x.id === t.value);
       try { if (e2.almacen === "drive") await abrirDrive(e2.reg); } catch (err) { render(); throw err; }
@@ -893,11 +946,17 @@ document.addEventListener("change", async e => {
       if (k === "tercero") {
         const x = t.value.trim() ? terPorCod(t.value) : null, tp = F.tipo === "V" ? "C" : "P";
         if (t.value.trim() && (!x || x.tipo !== tp)) { alert("No existe esa cuenta de " + (tp === "C" ? "cliente." : "proveedor.")); F.tercero_id = null; }
-        else { F.tercero_id = x ? x.id : null; S.fact.ls.forEach(l => { l.auto = esAutoRep(F); if (x && !l.tocado && !(+l.precio)) l.iva = ivaDefecto(x, F.tipo); }); }
+        else {
+          F.tercero_id = x ? x.id : null; S.fact.ls.forEach(l => { l.auto = esAutoRep(F); if (x && !l.tocado && !(+l.precio)) l.iva = ivaDefecto(x, F.tipo); });
+          if (x && (!F.fecha_vencimiento || F.vencAuto)) { const vv = calcVenc(x, F.fecha_emision); if (vv) { F.fecha_vencimiento = vv; F.vencAuto = true; } } // vencimiento según las condiciones de pago del tercero
+        }
         render();
       } else if (k === "retencion_tipo") { const [tp, pc] = t.value.split(":"); F.retencion_tipo = tp || ""; F.retencion_pct = tp ? +pc : 0; render(); }
       else if (k === "retencion_pct") { F.retencion_pct = +num(t.value) || 0; refrescaF(); }
-      else { F[k] = t.value; if (k === "fecha_registro") F.fecha_iva = t.value; }
+      else {
+        F[k] = t.value; if (k === "fecha_registro") F.fecha_iva = t.value; if (k === "fecha_vencimiento") F.vencAuto = false;
+        if (k === "fecha_emision" && (!F.fecha_vencimiento || F.vencAuto)) { const vv = calcVenc(terPorId(F.tercero_id), t.value); if (vv) { F.fecha_vencimiento = vv; F.vencAuto = true; render(); } }
+      }
     }
     else if (t.dataset.fl !== undefined) {
       const l = S.fact.ls[+t.dataset.fl], k = t.dataset.k;
@@ -1043,12 +1102,21 @@ document.addEventListener("click", async e => {
     }
     else if (a === "quitarter") { S.filtroTer = ""; render(); }
     else if (a === "selter") { S.selTer = b.dataset.id; render(); }
-    else if (a === "nuevoter") { const tp = b.dataset.t; S.terEdit = { id: uid(), tipo: tp, codigo: siguienteTer(tp), nombre: "", cif: "", grupo_iva: "NAC", telefono: "", email: "", cuenta: "" }; render(); }
-    else if (a === "editter") { const t = terPorId(b.dataset.id || S.selTer); if (t) { S.terEdit = { ...t }; S.selTer = t.id; render(); } }
+    else if (a === "nuevoter") { S.terEdit = terNuevo(b.dataset.t); render(); }
+    else if (a === "editter") { const t = terPorId(b.dataset.id || S.selTer); if (t) { S.terEdit = terClon(t); S.selTer = t.id; render(); } }
     else if (a === "cancelter") { S.terEdit = null; render(); }
+    else if (a === "fichasec") { S.fichaCerr[b.dataset.id] = !S.fichaCerr[b.dataset.id]; render(); }
+    else if (a === "addtl") {
+      const L = S.terEdit[b.dataset.l], pr = L.length === 0;
+      L.push(b.dataset.l === "contactos" ? { desc: "", tipo: "Correo electrónico", valor: "", ext: "", principal: pr } : { desc: "", dir: "", cp: "", poblacion: "", provincia: "", pais: (S.terEdit.ficha || {}).pais || "ES", proposito: "Negocio", principal: pr });
+      render();
+    }
+    else if (a === "deltl") { S.terEdit[b.dataset.l].splice(+b.dataset.i, 1); render(); }
     else if (a === "guardarter") {
-      const e2 = S.terEdit, v = id => document.getElementById(id).value.trim();
-      const t = { id: e2.id, empresa_id: S.emp.id, tipo: e2.tipo, codigo: v("te-codigo"), nombre: v("te-nombre"), cif: v("te-cif") || null, grupo_iva: v("te-grupo"), telefono: v("te-tel") || null, email: v("te-email") || null, cuenta: v("te-cuenta") || null };
+      const e2 = S.terEdit, ct = e2.contactos || [], principal = (f) => (ct.find(c => c.principal && f(c)) || ct.find(f) || {}).valor || null;
+      const t = { id: e2.id, empresa_id: S.emp.id, tipo: e2.tipo, codigo: (e2.codigo || "").trim(), nombre: (e2.nombre || "").trim(), cif: (e2.cif || "").trim() || null, grupo_iva: e2.grupo_iva || "NAC",
+        telefono: principal(c => c.tipo === "Teléfono" || c.tipo === "Móvil") || e2.telefono || null, email: principal(c => (c.tipo || "").startsWith("Correo")) || e2.email || null, cuenta: (e2.cuenta || "").trim() || null,
+        ficha: e2.ficha || {}, contactos: ct, direcciones: e2.direcciones || [] };
       if (!t.codigo || !t.nombre) return alert("Faltan la cuenta y el nombre.");
       if (S.d.terceros.some(x => x.id !== t.id && x.codigo.toLowerCase() === t.codigo.toLowerCase())) return alert("Ya existe esa cuenta de cliente/proveedor.");
       // cada cliente/proveedor tiene su propia cuenta de 9 dígitos bajo 430 (clientes) o 400 (proveedores)
@@ -1070,7 +1138,7 @@ document.addEventListener("click", async e => {
     /* facturas */
     else if (a === "nuevafact") {
       const tp = b.dataset.t, pre = b.dataset.ter || "";
-      const f = { id: uid(), empresa_id: S.emp.id, tipo: tp, numero: siguienteFact(tp), tercero_id: pre || null, num_externo: "", fecha_emision: hoy(), fecha_registro: hoy(), fecha_iva: hoy(), fecha_vencimiento: "", estado: "abierto", asiento_id: null, notas: "", retencion_tipo: "", retencion_pct: 0 };
+      const f = { id: uid(), empresa_id: S.emp.id, tipo: tp, numero: siguienteFact(tp), tercero_id: pre || null, num_externo: "", fecha_emision: hoy(), fecha_registro: hoy(), fecha_iva: hoy(), fecha_vencimiento: calcVenc(terPorId(pre), hoy()), vencAuto: true, estado: "abierto", asiento_id: null, notas: "", retencion_tipo: "", retencion_pct: 0 };
       S.vista = tp === "V" ? "fventa" : "fcompra"; S.fact = { f, ls: [nuevaLineaF(f)] }; render();
     }
     else if (a === "selfact") { S.selFact = b.dataset.id; render(); }
