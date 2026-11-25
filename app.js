@@ -3,6 +3,7 @@ import { PLAN_BASE } from "./plan-base.js";
 import { CODIGOS, CODIGO, DIR_NOMBRE } from "./codigos-iva.js";
 
 const $app = document.getElementById("app");
+const VERSION = new URL(import.meta.url).searchParams.get("v") || "?"; // el número viene de app.js?v=N en index.html
 const LOCAL = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 const r2 = n => Math.round((+n || 0) * 100) / 100;
 const eur = n => r2(n).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -748,7 +749,7 @@ function render() {
   if (!S.empresas.length && !S.emp) return renderEmpresaNueva();
   const years = [...new Set([new Date().getFullYear(), S.ej, ...S.d.asientos.map(a => a.ejercicio)])].sort();
   const nav = `<nav class="fo-nav"><a data-a="vista" data-v="inicio" class="${S.vista === "inicio" ? "on" : ""}">Inicio</a>${NAV.map(([g, it]) => `<div class="g">${g}</div>${it.map(([k, n]) => `<a data-a="vista" data-v="${k}" class="${S.vista === k ? "on" : ""}">${n}</a>`).join("")}`).join("")}</nav>`;
-  $app.innerHTML = `<div class="fo-top"><button data-a="nav" title="Menú">☰</button><b>Contabilidad</b>
+  $app.innerHTML = `<div class="fo-top"><button data-a="nav" title="Menú">☰</button><b>Contabilidad</b><span class="ver" title="Versión del programa">v${esc(VERSION)}</span>
    <div class="busca"><input id="busca" list="paginas" placeholder="Buscar una página"><datalist id="paginas">${Object.values(NOMBRES).map(n => `<option value="${n}">`).join("")}</datalist></div>
    <select id="emp">${S.empresas.map(e => `<option value="${e.id}" ${e.id === S.emp.id ? "selected" : ""}>${esc(e.nombre)}</option>`).join("")}</select>
    <button data-a="nuevaemp" title="Nueva empresa">+</button>
@@ -761,7 +762,7 @@ function renderEmpresaNueva() {
   $app.innerHTML = `<div class="login card"><h2>Nueva empresa</h2><input id="en" placeholder="Nombre"><input id="ecif" placeholder="CIF"><button class="p" data-a="crearemp">Crear</button></div>`;
 }
 function renderLogin(msg = "") {
-  $app.innerHTML = `<div class="login card"><h2>Contabilidad</h2><input id="lu" type="email" placeholder="Email"><input id="lp" type="password" placeholder="Contraseña"><button class="p" data-a="login">Entrar</button><p class="ko">${esc(msg)}</p></div>`;
+  $app.innerHTML = `<div class="login card"><h2>Contabilidad <small class="ver" style="color:var(--tx2)">v${esc(VERSION)}</small></h2><input id="lu" type="email" placeholder="Email"><input id="lp" type="password" placeholder="Contraseña"><button class="p" data-a="login">Entrar</button><p class="ko">${esc(msg)}</p></div>`;
 }
 
 const leerForm = () => { const f = document.getElementById("af"); if (f) { S.fechaAs = f.value; S.conceptoAs = document.getElementById("ac").value; S.docAs = document.getElementById("ad").value; } };
