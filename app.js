@@ -453,7 +453,7 @@ function campo(et, path, o = {}) {
   if (o.opts) return `<label class="fld">${et}<select data-tf="${path}">${optsHtml(o.opts, v)}</select></label>`;
   return `<label class="fld">${et}<input data-tf="${path}" type="${o.tipo || "text"}" value="${esc(v ?? "")}" ${o.list ? `list="${o.list}"` : ""} ${o.ph ? `placeholder="${esc(o.ph)}"` : ""}></label>`;
 }
-const secFicha = (id, titulo, cuerpo) => { const cerr = S.fichaCerr[id]; return `<div class="fsec"><a class="fh" data-a="fichasec" data-id="${id}">${cerr ? "▸" : "▾"} ${titulo}</a>${cerr ? "" : `<div class="fb">${cuerpo}</div>`}</div>`; };
+const secFicha = (id, titulo, cuerpo) => { const cerr = S.fichaCerr[id]; return `<div class="fsec"><a class="fh" data-a="fichasec" data-id="${id}"><span>${titulo}</span><span class="chev">${cerr ? "⌄" : "⌃"}</span></a>${cerr ? "" : `<div class="fb">${cuerpo}</div>`}</div>`; };
 function tablaLista(nombre, cols) { // lista editable (contactos o direcciones); cols: [clave, etiqueta, opciones opcionales]
   const L = S.terEdit[nombre];
   return `<table class="editable"><tr>${cols.map(c => `<th>${c[1]}</th>`).join("")}<th>Principal</th><th></th></tr>
@@ -956,7 +956,7 @@ function render() {
    <span class="ej">Ejercicio <select id="ej">${years.map(y => `<option ${y === S.ej ? "selected" : ""}>${y}</option>`).join("")}</select></span>
    ${sb ? `<button data-a="salir">Salir</button>` : ""}<span class="av">PO</span></div>
    <div class="fo-body"><div class="fo-rail"><button data-a="nav" title="Menú">☰</button><button data-a="vista" data-v="inicio" title="Inicio">⌂</button></div>
-   <div class="fo-page">${LOCAL ? `<p class="aviso">Modo local de pruebas: los datos están solo en este navegador.</p>` : ""}${V[S.vista]()}</div></div>${S.nav ? navHtml() : ""}`;
+   <div class="fo-page ${(S.terEdit || S.fact || S.libro || S.edit || S.vista === "inicio") ? "form" : ""}">${LOCAL ? `<p class="aviso">Modo local de pruebas: los datos están solo en este navegador.</p>` : ""}${V[S.vista]()}</div></div>${S.nav ? navHtml() : ""}`;
 }
 const leerFormEmp = () => {
   const f = S.formEmp || (S.formEmp = { nombre: "", cif: "", alm: LOCAL ? "local" : "nube", handle: null }), n = document.getElementById("en");
