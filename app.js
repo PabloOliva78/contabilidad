@@ -1,4 +1,5 @@
 ﻿import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
+import { PLAN_BASE } from "./plan-base.js";
 
 const $app = document.getElementById("app");
 const LOCAL = !SUPABASE_URL || !SUPABASE_ANON_KEY;
@@ -21,7 +22,12 @@ const PGC = [
   ["600","Compras de mercaderías"],["621","Arrendamientos y cánones"],["622","Reparaciones y conservación"],["623","Servicios de profesionales independientes"],
   ["625","Primas de seguros"],["626","Servicios bancarios"],["627","Publicidad y propaganda"],["628","Suministros"],["629","Otros servicios"],
   ["640","Sueldos y salarios"],["642","Seguridad Social a cargo de la empresa"],["662","Intereses de deudas"],["681","Amortización del inmovilizado material"],
-  ["700","Ventas de mercaderías"],["705","Prestaciones de servicios"],["759","Ingresos por servicios diversos"]
+  ["700","Ventas de mercaderías"],["705","Prestaciones de servicios"],["759","Ingresos por servicios diversos"],
+  // títulos necesarios para el plan base
+  ["121","Resultados negativos de ejercicios anteriores"],["460","Anticipos de remuneraciones"],["462","Embargos de salarios"],["470","H.P. deudora por diversos conceptos"],
+  ["4709","H.P. deudora por devolución de impuestos"],["473","H.P. retenciones y pagos a cuenta"],["4745","Crédito por pérdidas a compensar del ejercicio"],
+  ["4752","H.P. acreedora por Impuesto sobre Sociedades"],["4771","H.P. recargo de equivalencia"],["4773","H.P. IVA repercutido intracomunitario"],
+  ["555","Partidas pendientes de aplicación"],["602","Compras de otros aprovisionamientos"],["606","Descuentos sobre compras por pronto pago"],["609","Rappels por compras"]
 ];
 
 /* ---------------- Capa de datos (local o Supabase) ---------------- */
@@ -45,6 +51,7 @@ if (LOCAL) {
     async borrarFactura(id) { const d = g(); d.facturas = d.facturas.filter(f => f.id !== id); d.flineas = d.flineas.filter(l => l.factura_id !== id); s(d); },
     async crearCuentas(eid, lista) { const d = g(); for (const [codigo, nombre] of lista) if (!d.cuentas.some(c => c.empresa_id === eid && c.codigo === codigo)) d.cuentas.push({ id: uid(), empresa_id: eid, codigo, nombre }); s(d); },
     async borrarCuenta(id) { const d = g(); d.cuentas = d.cuentas.filter(c => c.id !== id); s(d); },
+    async renombrarCuenta(id, nombre) { const d = g(); const c = d.cuentas.find(x => x.id === id); if (c) c.nombre = nombre; s(d); },
     async crearAsiento(eid, fecha, concepto, apuntes, origen = "manual", documento = null) {
       const d = g(); const ej = +fecha.slice(0, 4);
       const num = Math.max(0, ...d.asientos.filter(a => a.empresa_id === eid && a.ejercicio === ej).map(a => a.numero)) + 1;
@@ -83,6 +90,7 @@ if (LOCAL) {
     async borrarFactura(id) { ok(await sb.from("facturas").delete().eq("id", id)); },
     async crearCuentas(eid, lista) { ok(await sb.from("cuentas").upsert(lista.map(([codigo, nombre]) => ({ empresa_id: eid, codigo, nombre })), { onConflict: "empresa_id,codigo", ignoreDuplicates: true })); },
     async borrarCuenta(id) { ok(await sb.from("cuentas").delete().eq("id", id)); },
+    async renombrarCuenta(id, nombre) { ok(await sb.from("cuentas").update({ nombre }).eq("id", id)); },
     async crearAsiento(eid, fecha, concepto, apuntes, origen = "manual", documento = null) { return ok(await sb.rpc("crear_asiento", { p_empresa: eid, p_fecha: fecha, p_concepto: concepto, p_origen: origen, p_apuntes: apuntes, p_documento: documento })); },
     async modificarAsiento(id, fecha, concepto, documento, apuntes) { ok(await sb.rpc("modificar_asiento", { p_asiento: id, p_fecha: fecha, p_concepto: concepto, p_documento: documento, p_apuntes: apuntes })); },
     async borrarAsiento(id) { ok(await sb.from("asientos").delete().eq("id", id)); },
@@ -207,7 +215,7 @@ V.cuentas = () => {
   const nivel = c => c.length <= 2 ? 0 : c.length === 3 ? 1 : c.length === 4 ? 2 : c.length < 9 ? 3 : 4;
   const filas = lista.map(c => `<tr data-sel class="${esMov(c.codigo) ? "" : "tit"} ${c.id === S.sel ? "sel" : ""}" data-a="selcuenta" data-id="${c.id}"><td style="padding-left:${.5 + nivel(c.codigo) * 1.1}rem">${esc(c.codigo)}</td><td>${esc(c.nombre)}</td><td>${esMov(c.codigo) ? "Movimiento" : "Título"}</td><td>${CATEG[c.codigo[0]] || ""}</td><td class="n">${sal(saldoPref(c.codigo, true))}</td><td class="n">${sal(saldoPref(c.codigo, false))}</td></tr>`).join("");
   const mov = sel ? S.d.apuntes.filter(p => p.cuenta === sel.codigo).length : 0;
-  const acc = btn("togglenueva", "+ Nuevo") + btn("delcuentasel", "Eliminar", "", !sel) + SEP + btn("pgc", "Cargar títulos del PGC") + SEP + btn("vermayor", "Transacciones", "", !sel);
+  const acc = btn("togglenueva", "+ Nuevo") + btn("delcuentasel", "Eliminar", "", !sel) + SEP + btn("renombrar", "Editar nombre", "", !sel) + SEP + btn("pgc", "Cargar plan base") + SEP + btn("vermayor", "Transacciones", "", !sel);
   return pagina("Cuentas principales", acc, `
   ${S.nueva ? `<div class="card"><div class="row"><input id="cc" placeholder="Cuenta (9 dígitos)" size="14" value="${esc(S.nuevaCod || "")}"><input id="cn" placeholder="Nombre" size="40"><button class="p" data-a="addcuenta">Aceptar</button><button data-a="togglenueva">Cancelar</button></div>
    <small style="color:var(--tx2)">Las cuentas de movimiento tienen 9 dígitos y cuelgan de un título (p. ej. 572000001 bajo 572). Seleccione un título antes de pulsar Nuevo y se propone el siguiente código libre. Los títulos de menos de 9 dígitos no admiten movimientos.</small></div>` : ""}
@@ -416,7 +424,8 @@ async function registrarFactura() {
   validas.forEach((l, i) => { if (!cuentaValida(l.cuenta)) err.push("Línea " + (i + 1) + ": la cuenta " + (l.cuenta || "(vacía)") + " no existe o no es de movimiento (9 dígitos)."); });
   const ctrl = t ? (t.cuenta || "") : "";
   if (t && !cuentaValida(ctrl)) err.push("El " + (cli ? "cliente" : "proveedor") + " no tiene una cuenta contable de 9 dígitos válida. Edítelo y guárdelo.");
-  const ivaC = cuentaSis(cli ? "477" : "472"), retC = cuentaSis("4751"), necesitaRet = !cli && retDe(f, totalesF(validas).base) > 0;
+  const RET_PREF = { 111: "475100001", 115: "475100003", 123: "475100004" }; // cuenta de retenciones según el modelo
+  const ivaC = cuentaSis(cli ? "477" : "472"), retC = S.d.cuentas.some(c => c.codigo === RET_PREF[f.retencion_tipo]) ? RET_PREF[f.retencion_tipo] : cuentaSis("4751"), necesitaRet = !cli && retDe(f, totalesF(validas).base) > 0;
   [[ivaC, cli ? "477" : "472"], ...(necesitaRet ? [[retC, "4751"]] : [])].forEach(([c, m]) => { if (!S.d.cuentas.some(x => x.codigo === c) && !S.d.cuentas.some(x => x.codigo === m)) err.push("Falta el título " + m + " en el plan de cuentas. Cargue los títulos del PGC."); });
   if (err.length) return alert("No se puede registrar:\n" + err.join("\n"));
   await asegurarCuenta(ivaC, nombreMaestro(cli ? "477" : "472")); if (necesitaRet) await asegurarCuenta(retC, nombreMaestro("4751")); // cuentas de movimiento de IVA y retenciones, creadas bajo su título si aún no existen
@@ -755,7 +764,7 @@ document.addEventListener("click", async e => {
     if (a === "vista") { S.vista = b.dataset.v; if (S.vista !== "diario") S.libro = null; S.fact = null; S.terEdit = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
     else if (a === "nav") { S.nav = !S.nav; render(); }
     else if (a === "nuevaemp") { S.emp = null; $app.innerHTML = ""; renderEmpresaNueva(); }
-    else if (a === "crearemp") { const e2 = await db.crearEmpresa(document.getElementById("en").value.trim(), document.getElementById("ecif").value.trim()); S.empresas = await db.empresas(); S.emp = S.empresas.find(x => x.id === e2.id); await db.crearCuentas(S.emp.id, PGC); await recargar(); }
+    else if (a === "crearemp") { const e2 = await db.crearEmpresa(document.getElementById("en").value.trim(), document.getElementById("ecif").value.trim()); S.empresas = await db.empresas(); S.emp = S.empresas.find(x => x.id === e2.id); await db.crearCuentas(S.emp.id, [...PGC, ...PLAN_BASE]); await recargar(); }
     else if (a === "selcuenta") { S.sel = b.dataset.id; render(); }
     else if (a === "togglenueva") { S.nueva = !S.nueva; if (S.nueva) { const c = S.d.cuentas.find(x => x.id === S.sel), m = c ? (c.codigo.length < 9 ? c.codigo : maestroDe(c.codigo)) : ""; S.nuevaCod = m ? siguienteCuenta(m) : ""; } render(); }
     else if (a === "delcuentasel") {
@@ -774,7 +783,12 @@ document.addEventListener("click", async e => {
       if (c.length === 9 && !maestroDe(c)) return alert("La cuenta de movimiento debe colgar de un título existente (p. ej. 572 para 572000001). Cargue los títulos del PGC o cree antes el título.");
       await db.crearCuentas(S.emp.id, [[c, n]]); S.nueva = false; await recargar();
     }
-    else if (a === "pgc") { await db.crearCuentas(S.emp.id, PGC); await recargar(); }
+    else if (a === "pgc") { await db.crearCuentas(S.emp.id, [...PGC, ...PLAN_BASE]); await recargar(); }
+    else if (a === "renombrar") {
+      const c = S.d.cuentas.find(x => x.id === S.sel); if (!c) return;
+      const n = (prompt("Nuevo nombre de la cuenta " + c.codigo + ":", c.nombre) || "").trim(); if (!n || n === c.nombre) return;
+      await db.renombrarCuenta(c.id, n); await recargar();
+    }
     /* lotes de diario */
     else if (a === "nuevolote") { const nombre = (prompt("Nombre del diario:", "GENERAL") || "").trim().toUpperCase(); if (!nombre) return; const desc = (prompt("Descripción:") || "").trim(); const l = { id: uid(), empresa_id: S.emp.id, numero: siguienteLote(), nombre, descripcion: desc }; await db.guardarLibro(l); S.selLote = l.numero; await recargar(); }
     else if (a === "sellote") { S.selLote = b.dataset.id; render(); }
