@@ -104,7 +104,7 @@ if (LOCAL) {
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", navMod: "", navCerr: {}, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -180,12 +180,26 @@ function comprobar(ls) {
 /* ---------------- Vistas ---------------- */
 const V = {};
 const CATEG = { 1: "Pasivo / PN", 2: "Activo", 3: "Activo", 4: "Mixta", 5: "Mixta", 6: "Gastos", 7: "Ingresos" };
+// Menú tipo D365: módulos > secciones > carpetas > pantallas (it = enlaces, sub = carpetas con enlaces)
 const NAV = [
-  ["Libro mayor", [["cuentas", "Cuentas principales"], ["diario", "Diarios generales"], ["mayor", "Transacciones del libro mayor"], ["sumas", "Balance de comprobación"], ["estados", "Estados financieros"]]],
-  ["Cuentas a cobrar", [["clientes", "Todos los clientes"], ["fventa", "Facturas de cliente"], ["cobros", "Cobros pendientes"]]],
-  ["Cuentas a pagar", [["proveedores", "Todos los proveedores"], ["fcompra", "Facturas de proveedor"], ["pagos", "Pagos pendientes"]]],
-  ["Impuestos", [["codigos", "Códigos de impuestos"], ["libroiva", "Libros de IVA"], ["m303", "Modelo 303"], ["m390", "Modelo 390"], ["m349", "Modelo 349"], ["m347", "Modelo 347"], ["m111", "Modelo 111"], ["m115", "Modelo 115"], ["m123", "Modelo 123"]]]
+  { g: "Libro mayor", sec: [
+    { n: "Entradas de diario", it: [["diario", "Diarios generales"]] },
+    { n: "Consultas e informes", sub: [{ n: "Consultas", it: [["mayor", "Transacciones del libro mayor"]] }, { n: "Informes", it: [["sumas", "Balance de comprobación"], ["estados", "Estados financieros"]] }] },
+    { n: "Configurar", sub: [{ n: "Plan de cuentas", it: [["cuentas", "Cuentas principales"]] }] }] },
+  { g: "Cuentas a cobrar", sec: [
+    { n: "Clientes", it: [["clientes", "Todos los clientes"]] },
+    { n: "Facturas y cobros", sub: [{ n: "Facturas", it: [["fventa", "Facturas de cliente"]] }, { n: "Cobros", it: [["cobros", "Cobros pendientes"]] }] }] },
+  { g: "Cuentas a pagar", sec: [
+    { n: "Proveedores", it: [["proveedores", "Todos los proveedores"]] },
+    { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] }] },
+  { g: "Impuestos", sec: [
+    { n: "Impuestos indirectos", sub: [{ n: "Impuestos", it: [["codigos", "Códigos de impuestos"]] }] },
+    { n: "Consultas e informes", sub: [{ n: "Libros de impuestos", it: [["libroiva", "Libros de IVA"]] }] },
+    { n: "Declaraciones", sub: [
+      { n: "Impuestos", it: [["m303", "Modelo 303 · IVA y liquidación"], ["m390", "Modelo 390 · Resumen anual de IVA"], ["m111", "Modelo 111 · Retenciones trabajo y profesionales"], ["m115", "Modelo 115 · Retenciones de alquileres"], ["m123", "Modelo 123 · Retenciones de capital mobiliario"], ["m347", "Modelo 347 · Operaciones con terceros"]] },
+      { n: "Comercio exterior", it: [["m349", "Modelo 349 · Operaciones intracomunitarias"]] }] }] }
 ];
+const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
   clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", codigos: "Códigos de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123" };
 
@@ -748,15 +762,22 @@ function panelLiq(clave) {
 function render() {
   if (!S.empresas.length && !S.emp) return renderEmpresaNueva();
   const years = [...new Set([new Date().getFullYear(), S.ej, ...S.d.asientos.map(a => a.ejercicio)])].sort();
-  const nav = `<nav class="fo-nav"><a data-a="vista" data-v="inicio" class="${S.vista === "inicio" ? "on" : ""}">Inicio</a>${NAV.map(([g, it]) => `<div class="g">${g}</div>${it.map(([k, n]) => `<a data-a="vista" data-v="${k}" class="${S.vista === k ? "on" : ""}">${n}</a>`).join("")}`).join("")}</nav>`;
+  const navHtml = () => { // panel de navegación como D365: lista de módulos y, al elegir uno, su árbol de secciones y carpetas
+    const m = NAV.find(x => x.g === S.navMod);
+    const link = ([k, n]) => `<a class="lnk ${S.vista === k ? "on" : ""}" data-a="vista" data-v="${k}">${esc(n)}</a>`;
+    const sec = s => { const key = m.g + "|" + s.n, cerr = S.navCerr[key];
+      return `<div class="sec-n"><a class="sec-h" data-a="navsec" data-id="${esc(key)}">${cerr ? "▸" : "▾"} ${esc(s.n)}</a>${cerr ? "" : (s.it || []).map(link).join("") + (s.sub || []).map(b => `<div class="sub-n"><div class="sub-h">${esc(b.n)}</div>${b.it.map(link).join("")}</div>`).join("")}</div>`; };
+    return `<div class="nav-fondo" data-a="nav"></div><div class="nav-over"><nav class="nav-mod"><a data-a="vista" data-v="inicio" class="${S.vista === "inicio" ? "on" : ""}">Inicio</a><div class="g">Módulos</div>${NAV.map(x => `<a data-a="navmod" data-id="${esc(x.g)}" class="${S.navMod === x.g ? "on" : ""}">${esc(x.g)} <span>›</span></a>`).join("")}</nav>
+     ${m ? `<div class="nav-panel"><div class="nav-bar"><button data-a="navexp">⊞ Expandir</button><button data-a="navcon">⊟ Contraer</button></div><div class="nav-cols">${m.sec.map(sec).join("")}</div></div>` : `<div class="nav-panel"><p style="color:var(--tx2)">Elija un módulo.</p></div>`}</div>`;
+  };
   $app.innerHTML = `<div class="fo-top"><button data-a="nav" title="Menú">☰</button><b>Contabilidad</b><span class="ver" title="Versión del programa">v${esc(VERSION)}</span>
    <div class="busca"><input id="busca" list="paginas" placeholder="Buscar una página"><datalist id="paginas">${Object.values(NOMBRES).map(n => `<option value="${n}">`).join("")}</datalist></div>
    <select id="emp">${S.empresas.map(e => `<option value="${e.id}" ${e.id === S.emp.id ? "selected" : ""}>${esc(e.nombre)}</option>`).join("")}</select>
    <button data-a="nuevaemp" title="Nueva empresa">+</button>
    <span class="ej">Ejercicio <select id="ej">${years.map(y => `<option ${y === S.ej ? "selected" : ""}>${y}</option>`).join("")}</select></span>
    ${sb ? `<button data-a="salir">Salir</button>` : ""}<span class="av">PO</span></div>
-   <div class="fo-body">${S.nav ? nav : `<div class="fo-rail"><button data-a="nav" title="Menú">☰</button><button data-a="vista" data-v="inicio" title="Inicio">⌂</button></div>`}
-   <div class="fo-page">${LOCAL ? `<p class="aviso">Modo local de pruebas: los datos están solo en este navegador.</p>` : ""}${V[S.vista]()}</div></div>`;
+   <div class="fo-body"><div class="fo-rail"><button data-a="nav" title="Menú">☰</button><button data-a="vista" data-v="inicio" title="Inicio">⌂</button></div>
+   <div class="fo-page">${LOCAL ? `<p class="aviso">Modo local de pruebas: los datos están solo en este navegador.</p>` : ""}${V[S.vista]()}</div></div>${S.nav ? navHtml() : ""}`;
 }
 function renderEmpresaNueva() {
   $app.innerHTML = `<div class="login card"><h2>Nueva empresa</h2><input id="en" placeholder="Nombre"><input id="ecif" placeholder="CIF"><button class="p" data-a="crearemp">Crear</button></div>`;
@@ -837,8 +858,12 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
   const a = b.dataset.a;
   try {
-    if (a === "vista") { S.vista = b.dataset.v; if (S.vista !== "diario") S.libro = null; S.fact = null; S.terEdit = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
-    else if (a === "nav") { S.nav = !S.nav; render(); }
+    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (S.vista !== "diario") S.libro = null; S.fact = null; S.terEdit = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
+    else if (a === "nav") { S.nav = !S.nav; if (S.nav) S.navMod = moduloDe(S.vista) || S.navMod; render(); }
+    else if (a === "navmod") { S.navMod = b.dataset.id; render(); }
+    else if (a === "navsec") { S.navCerr[b.dataset.id] = !S.navCerr[b.dataset.id]; render(); }
+    else if (a === "navexp") { S.navCerr = {}; render(); }
+    else if (a === "navcon") { const m = NAV.find(x => x.g === S.navMod); if (m) m.sec.forEach(s => { S.navCerr[m.g + "|" + s.n] = true; }); render(); }
     else if (a === "nuevaemp") { S.emp = null; $app.innerHTML = ""; renderEmpresaNueva(); }
     else if (a === "crearemp") { const e2 = await db.crearEmpresa(document.getElementById("en").value.trim(), document.getElementById("ecif").value.trim()); S.empresas = await db.empresas(); S.emp = S.empresas.find(x => x.id === e2.id); await db.crearCuentas(S.emp.id, [...PGC, ...PLAN_BASE]); await recargar(); }
     else if (a === "selcuenta") { S.sel = b.dataset.id; render(); }
