@@ -1,6 +1,6 @@
 ﻿import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 import { PLAN_BASE } from "./plan-base.js";
-import { CODIGOS, CODIGO, DIR_NOMBRE } from "./codigos-iva.js";
+import { CODIGOS, CODIGO, DIR_NOMBRE, COMBINACIONES } from "./codigos-iva.js";
 
 const $app = document.getElementById("app");
 const VERSION = new URL(import.meta.url).searchParams.get("v") || "?"; // el número viene de app.js?v=N en index.html
@@ -149,7 +149,7 @@ const db = new Proxy({}, { get: (_, m) => (...a) => m === "empresas" ? listarEmp
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", navMod: "", navCerr: {}, fichaCerr: {}, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -238,7 +238,7 @@ const NAV = [
     { n: "Proveedores", it: [["proveedores", "Todos los proveedores"]] },
     { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] }] },
   { g: "Impuestos", sec: [
-    { n: "Impuestos indirectos", sub: [{ n: "Impuestos", it: [["codigos", "Códigos de impuestos"]] }] },
+    { n: "Impuestos indirectos", sub: [{ n: "Impuestos", it: [["codigos", "Códigos de impuestos"], ["combos", "Combinaciones de impuestos"]] }] },
     { n: "Consultas e informes", sub: [{ n: "Libros de impuestos", it: [["libroiva", "Libros de IVA"]] }] },
     { n: "Declaraciones", sub: [
       { n: "Impuestos", it: [["m303", "Modelo 303 · IVA y liquidación"], ["m390", "Modelo 390 · Resumen anual de IVA"], ["m111", "Modelo 111 · Retenciones trabajo y profesionales"], ["m115", "Modelo 115 · Retenciones de alquileres"], ["m123", "Modelo 123 · Retenciones de capital mobiliario"], ["m347", "Modelo 347 · Operaciones con terceros"]] },
@@ -246,7 +246,7 @@ const NAV = [
 ];
 const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", codigos: "Códigos de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -387,15 +387,34 @@ const IVAS = [0, 4, 10, 21];
 function siguienteTer(tipo) { let m = 0; for (const t of S.d.terceros) { const k = new RegExp("^" + tipo + "(\\d+)$").exec(t.codigo); if (k) m = Math.max(m, +k[1]); } return tipo + String(m + 1).padStart(5, "0"); }
 function siguienteFact(tipo) { let m = 0; for (const f of S.d.facturas) { if (f.tipo !== tipo) continue; const k = /^F[VC](\d+)$/.exec(f.numero); if (k) m = Math.max(m, +k[1]); } return (tipo === "V" ? "FV" : "FC") + String(m + 1).padStart(6, "0"); }
 const saldoTer = t => r2(S.d.apuntes.filter(p => p.tercero_id === t.id).reduce((a, p) => a + (t.tipo === "C" ? +p.debe - +p.haber : +p.haber - +p.debe), 0));
+// Totales de una factura a partir de sus líneas. Cada línea lleva un código de impuestos (l.cod) y, en ventas, un recargo opcional (l.rec).
+// Las líneas con autorrepercusión (UE e inversión del sujeto pasivo, l.auto) no llevan IVA en la factura: su cuota no se paga al proveedor.
 function totalesF(ls) {
-  const porIva = new Map(); let base = 0;
-  ls.forEach(l => { const b = r2((+l.cantidad || 0) * (+l.precio || 0)); base = r2(base + b); porIva.set(+l.iva || 0, r2((porIva.get(+l.iva || 0) || 0) + b)); });
-  let cuota = 0; porIva.forEach((b, i) => { cuota = r2(cuota + r2(b * i / 100)); });
-  const auto = ls.some(l => l.auto); // compra a proveedor de la UE: el IVA se autorrepercute y no se paga al proveedor
-  return { base, cuota, total: r2(base + (auto ? 0 : cuota)), auto };
+  let base = 0, rec = 0; const porKey = new Map();
+  ls.forEach(l => {
+    const b = r2((+l.cantidad || 0) * (+l.precio || 0)); base = r2(base + b);
+    const k = (l.auto ? "A" : "N") + "|" + (+l.iva || 0); porKey.set(k, r2((porKey.get(k) || 0) + b));
+    const rc = l.rec && CODIGO[l.rec] ? CODIGO[l.rec].pct : 0; if (rc) rec = r2(rec + r2(b * rc / 100));
+  });
+  let cuotaN = 0, cuotaA = 0; porKey.forEach((b, k) => { const [t, p] = k.split("|"), c = r2(b * (+p) / 100); if (t === "A") cuotaA = r2(cuotaA + c); else cuotaN = r2(cuotaN + c); });
+  return { base, cuota: cuotaN, cuotaA, rec, total: r2(base + cuotaN + rec), auto: ls.some(l => l.auto) };
 }
 const estadoF = f => (f.estado === "registrado" && S.d.asientos.some(a => a.id === f.asiento_id)) ? "Registrado" : "Abierto";
-const lineasF = f => S.d.flineas.filter(l => l.factura_id === f.id).sort((a, b) => a.orden - b.orden).map(l => ({ ...l, auto: esAutoRep(f) }));
+// código de impuestos de las líneas antiguas (sin código): se deduce del porcentaje
+const INFERIDOS = { C: { 21: "S.NC.NR", 10: "S.NC.RD", 5: "S.NC.RDN", 4: "S.NC.SR", 2: "S.NC.SRN", 0: "S.NC.EX" }, V: { 21: "R.NC.NR", 10: "R.NC.RD", 4: "R.NC.SR", 2: "R.NC.SRN", 0: "R.NC.EX" } };
+const inferCod = (tipo, pct) => (INFERIDOS[tipo] || {})[+pct || 0] || (tipo === "C" ? "S.NC.NR" : "R.NC.NR");
+const codLinea = (f, l) => CODIGO[l.cod] || CODIGO[inferCod(f.tipo, l.iva)];
+const lineasF = f => S.d.flineas.filter(l => l.factura_id === f.id).sort((a, b) => a.orden - b.orden).map(l => { const x = { ...l, cod: l.cod_iva || "", rec: l.cod_rec || "" }, c = codLinea(f, x); x.cod = c.cod; x.auto = c.tipo === "ue" || c.tipo === "isp"; return x; });
+// código de impuestos por defecto de un tercero: el de su ficha o, si no tiene, el normal según su grupo de impuestos
+function codDefecto(t, tipo) {
+  const c = t && t.ficha && t.ficha.cod_iva; if (c && CODIGO[c] && CODIGO[c].lado === tipo_a_lado(tipo)) return c;
+  const g = t ? t.grupo_iva : "NAC";
+  return tipo === "C" ? (g === "UE" ? "S.UE.NR" : g === "EXT" ? "S.EX.NR" : "S.NC.NR") : (g === "UE" ? "R.UE" : g === "EXT" ? "R.EX" : "R.NC.NR");
+}
+const tipo_a_lado = tipo => tipo === "C" ? "C" : "V"; // el tipo de factura ya coincide con el lado del código (C compras, V ventas)
+const codsLinea = tipo => CODIGOS.filter(c => !c.oculto && (tipo === "C" ? ["nac", "ex", "inv", "ue", "isp", "imp"].includes(c.tipo) && c.lado === "C" : ["nac", "ex"].includes(c.tipo) && c.lado === "V"));
+const codsRec = () => CODIGOS.filter(c => c.tipo === "rec");
+const codsRet = tipo => CODIGOS.filter(c => tipo === "C" ? c.tipo === "ret" && !c.oculto : c.tipo === "retc");
 // cuentas fijas de IVA: 472000001 soportado nacional (todos los tipos), 472200001 soportado intracomunitario (autorrepercusión),
 // 472200002 DUAs, 477000001 repercutido nacional (todos los tipos), 477300001 repercutido intracomunitario (autorrepercusión)
 const CTA = { sop: "472000001", sopUE: "472200001", sopDUA: "472200002", rep: "477000001", repUE: "477300001" };
@@ -442,7 +461,7 @@ function tablaLista(nombre, cols) { // lista editable (contactos o direcciones);
    <div class="row" style="margin-top:.4rem"><button data-a="addtl" data-l="${nombre}">+ Agregar</button></div>`;
 }
 function fichaTercero(tipo) {
-  const e = S.terEdit, cli = tipo === "C", otros = S.d.terceros.filter(t => t.tipo === tipo && t.id !== e.id);
+  const e = S.terEdit, cli = tipo === "C", lado = cli ? "V" : "C", otros = S.d.terceros.filter(t => t.tipo === tipo && t.id !== e.id);
   const acc = `<button class="p" data-a="guardarter">Guardar</button>` + btn("cancelter", "Cancelar");
   const general = `<div class="fgrid">
     <div class="fcol"><h4>${cli ? "CLIENTE" : "PROVEEDOR"}</h4>${campo("Cuenta", "codigo")}${campo("Tipo", "ficha.tipoPersona", { opts: ["Organización", "Persona"] })}${campo("Nombre", "nombre")}${campo("Nombre de búsqueda", "ficha.busqueda")}${campo(cli ? "Grupo de clientes" : "Grupo de proveedores", "ficha.grupo")}${campo("Grupo de clasificación", "ficha.clasificacion")}${campo("Prioridad de pago", "ficha.prioridad")}</div>
@@ -457,7 +476,8 @@ function fichaTercero(tipo) {
     <p style="color:var(--tx2);margin:.5rem 0 0">Con las condiciones de pago (y el día de pago) el vencimiento de cada factura se calcula solo.</p>`;
   const fyE = `<div class="fgrid"><div class="fcol"><h4>FACTURA</h4>${campo("Cuenta de facturación", "ficha.fact.cuenta_fact", { opts: otros.map(t => [t.id, t.codigo + " · " + t.nombre]) })}${campo("Dirección de la factura", "ficha.fact.dir_fact", { opts: e.direcciones.map((d, i) => [String(i), d.desc || d.dir || "Dirección " + (i + 1)]) })}${campo("Grupo de secuencias numéricas", "ficha.fact.seq")}${campo("Plantilla de factura", "ficha.fact.plantilla")}</div>
     <div class="fcol"><h4>ENTREGA</h4>${campo("Zona de porte", "ficha.ent.zona")}${campo("Condiciones de entrega", "ficha.ent.cond", { opts: INCOTERMS })}${campo("Modo de entrega", "ficha.ent.modo")}${campo("Motivo de la entrega", "ficha.ent.motivo")}${campo("Código de destino", "ficha.ent.destino")}${campo("Calendario de recepción", "ficha.ent.calendario")}</div>
-    <div class="fcol"><h4>IMPUESTOS Y CONTABILIDAD</h4>${campo("NIF", "cif")}${campo("Grupo de impuestos", "grupo_iva", { opts: [["NAC", "NAC · Nacional"], ["UE", "UE · Intracomunitario"], ["EXT", "EXT · Terceros países"]] })}${campo("Cuenta contable (9 dígitos)", "cuenta", { list: "dl", ph: "automática" })}</div></div>`;
+    <div class="fcol"><h4>IMPUESTOS Y CONTABILIDAD</h4>${campo("NIF", "cif")}${campo("Grupo de impuestos", "grupo_iva", { opts: [["NAC", "NAC · Nacional"], ["UE", "UE · Intracomunitario"], ["EXT", "EXT · Terceros países"]] })}${campo("Cuenta contable (9 dígitos)", "cuenta", { list: "dl", ph: "automática" })}
+      <h4 style="margin-top:.8rem">IMPUESTOS POR DEFECTO EN FACTURAS</h4>${campo("Combinación de impuestos", "ficha.comb", { opts: combos(lado).map(c => [c.id, c.nombre]) })}${campo("Código de impuestos", "ficha.cod_iva", { opts: codsLinea(lado).map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campo("Código de retención", "ficha.cod_ret", { opts: codsRet(lado).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]) })}${cli ? campo("Recargo de equivalencia", "ficha.cod_rec", { opts: codsRec().map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]) }) : ""}</div></div>`;
   return pagina(cli ? "Cliente" : "Proveedor", acc, `<datalist id="dl">${optsCuentas()}</datalist>${secFicha("gen", "General", general)}${secFicha("con", "Información de contacto", contacto)}${secFicha("pais", "País y direcciones", pais)}${secFicha("pago", "Condiciones de pago", pago)}${secFicha("fye", "Factura y entrega", fyE)}`,
     { tabs: ["Ficha"], vista: e.codigo + (e.nombre ? " : " + e.nombre : "") });
 }
@@ -493,38 +513,45 @@ function vistaFacturaEdit() {
    <label>Fecha de factura<br><input type="date" data-f="fecha_emision" ${dis} value="${f.fecha_emision || ""}"></label>
    <label>Fecha de registro<br><input type="date" data-f="fecha_registro" ${dis} value="${f.fecha_registro || ""}"></label>
    <label>Vencimiento<br><input type="date" data-f="fecha_vencimiento" ${dis} value="${f.fecha_vencimiento || ""}"></label>
-   ${cli ? "" : `<label>Retención IRPF<br><select data-f="retencion_tipo" ${dis}>${opcionesRetencion(f)}</select></label>
-   <label>% ret.<br><input data-f="retencion_pct" size="5" ${dis || (f.retencion_tipo ? "" : "disabled")} value="${f.retencion_pct || 0}"></label>`}
+   <label>Combinación de impuestos<br><select data-f="combo" ${dis}>${optsHtml(combos(f.tipo).map(c => [c.id, c.nombre]), f.comb)}</select></label>
+   <label>Retención IRPF<br><select data-f="retencion_tipo" ${dis}>${opcionesRetencion(f)}</select></label>
+   <label>% ret.<br><input data-f="retencion_pct" size="5" ${dis || (f.cod_ret ? "" : "disabled")} value="${f.retencion_pct || 0}"></label>
    <label>Estado<br><b>${estadoF(f)}</b></label></div></div>
   <datalist id="dlter">${S.d.terceros.filter(x => x.tipo === (cli ? "C" : "P")).map(x => `<option value="${esc(x.codigo)}">${esc(x.nombre)}</option>`).join("")}</datalist>
   <datalist id="dl">${optsCuentas()}</datalist>`;
   const filas = ls.map((l, i) => `<tr><td><input data-fl="${i}" data-k="descripcion" size="34" ${dis} value="${esc(l.descripcion || "")}"></td><td><input data-fl="${i}" data-k="cuenta" list="dl" size="9" ${dis} value="${esc(l.cuenta || "")}"></td>
    <td><input class="n" data-fl="${i}" data-k="cantidad" size="7" ${dis} value="${l.cantidad}"></td><td><input class="n" data-fl="${i}" data-k="precio" size="10" ${dis} value="${l.precio}"></td>
-   <td><select data-fl="${i}" data-k="iva" ${dis}>${IVAS.map(v => `<option ${v === +l.iva ? "selected" : ""} value="${v}">${v} %</option>`).join("")}</select></td>
+   <td><select data-fl="${i}" data-k="cod" ${dis}>${optsHtml(codsLinea(f.tipo).map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]), l.cod)}</select></td>
+   ${cli ? `<td><select data-fl="${i}" data-k="rec" ${dis}>${optsHtml(codsRec().map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), l.rec)}</select></td>` : ""}
    <td class="n" data-imp="${i}">${eur((+l.cantidad || 0) * (+l.precio || 0))}</td><td>${reg ? "" : `<button class="d" data-a="dellineaf" data-i="${i}">✕</button>`}</td></tr>`).join("");
   return pagina(cli ? "Factura de cliente" : "Factura de proveedor", acc, `${cab}
-  <div class="pagina"><div class="lista"><table class="editable"><tr><th>Descripción</th><th>${cli ? "Cuenta de ingresos" : "Cuenta de gastos"}</th><th class="n">Cantidad</th><th class="n">Precio unitario</th><th>IVA</th><th class="n">Importe</th><th></th></tr>${filas}</table>
+  <div class="pagina"><div class="lista"><table class="editable"><tr><th>Descripción</th><th>${cli ? "Cuenta de ingresos" : "Cuenta de gastos"}</th><th class="n">Cantidad</th><th class="n">Precio unitario</th><th>Código de impuestos</th>${cli ? "<th>Recargo</th>" : ""}<th class="n">Importe</th><th></th></tr>${filas}</table>
    ${reg ? "" : `<div class="row" style="margin-top:.5rem"><button data-a="addlineaf">+ Línea</button></div>`}
-   <div class="pie" id="pieF"><span>Base imponible <b id="tb">${eur(tot.base)}</b></span><span>IVA <b id="ti">${eur(tot.cuota)}</b></span><span>Total <b id="tt">${eur(tot.total)}</b></span>${cli ? "" : `<span>Retención <b id="tr">${eur(retDe(f, tot.base))}</b></span><span>A pagar <b id="ta">${eur(r2(tot.total - retDe(f, tot.base)))}</b></span>`}${reg ? `<span>${cli ? "Cobrado" : "Pagado"} <b>${eur(pagadoF(f))}</b></span><span>Pendiente <b>${eur(pendienteF(f))}</b></span>` : ""}</div></div>
+   <div class="pie" id="pieF">${pieHtml(f, ls, reg)}</div></div>
   <aside class="factbox"><h3>${cli ? "Cliente" : "Proveedor"}</h3>${t ? `<dl><dt>Cuenta</dt><dd>${esc(t.codigo)}</dd><dt>NIF</dt><dd>${esc(t.cif || "")}</dd><dt>Grupo de impuestos</dt><dd>${esc(t.grupo_iva)}</dd><dt>Saldo</dt><dd>${eur(saldoTer(t))}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione ${cli ? "un cliente" : "un proveedor"}.</p>`}
    <h3 style="margin-top:1rem">Factura</h3><dl><dt>Número</dt><dd>${esc(f.numero)}</dd></dl></aside></div>`, { tabs: ["Líneas", "General"], vista: `${f.numero}${t ? " · " + t.nombre : ""}` });
 }
 V.fventa = () => S.fact && S.fact.f.tipo === "V" ? vistaFacturaEdit() : vistaFacturas("V");
 V.fcompra = () => S.fact && S.fact.f.tipo === "C" ? vistaFacturaEdit() : vistaFacturas("C");
+function pieHtml(f, ls, reg) { // totales al pie de la factura: base, IVA, autorrepercutido, recargo, total y retención
+  const cli = f.tipo === "V", tot = totalesF(ls), r = retDe(f, tot.base);
+  return `<span>Base imponible <b>${eur(tot.base)}</b></span><span>IVA <b>${eur(tot.cuota)}</b></span>${tot.cuotaA ? `<span>IVA autorrepercutido <b>${eur(tot.cuotaA)}</b></span>` : ""}${tot.rec ? `<span>Recargo <b>${eur(tot.rec)}</b></span>` : ""}<span>Total <b>${eur(tot.total)}</b></span>${r ? `<span>Retención <b>${eur(r)}</b></span><span>${cli ? "A cobrar" : "A pagar"} <b>${eur(r2(tot.total - r))}</b></span>` : ""}${reg ? `<span>${cli ? "Cobrado" : "Pagado"} <b>${eur(pagadoF(f))}</b></span><span>Pendiente <b>${eur(pendienteF(f))}</b></span>` : ""}`;
+}
 function refrescaF() {
-  const { f, ls } = S.fact, tot = totalesF(ls);
-  document.getElementById("tb").textContent = eur(tot.base); document.getElementById("ti").textContent = eur(tot.cuota); document.getElementById("tt").textContent = eur(tot.total);
-  if (document.getElementById("tr")) { const r = retDe(f, tot.base); document.getElementById("tr").textContent = eur(r); document.getElementById("ta").textContent = eur(r2(tot.total - r)); }
+  const { f, ls } = S.fact;
+  document.getElementById("pieF").innerHTML = pieHtml(f, ls, estadoF(f) === "Registrado");
   document.querySelectorAll("[data-imp]").forEach(td => { const l = ls[+td.dataset.imp]; td.textContent = l ? eur((+l.cantidad || 0) * (+l.precio || 0)) : ""; });
 }
 // IVA por defecto: nacional 21 %; proveedor UE 21 % que se autorrepercute; cliente UE o terceros países 0 % (exento)
-const ivaDefecto = (t, tipo) => !t || t.grupo_iva === "NAC" ? 21 : 0;
-function nuevaLineaF(f) { return { id: null, descripcion: "", cuenta: primeraCuenta(f.tipo === "V" ? "700" : "600"), cantidad: 1, precio: 0, iva: ivaDefecto(terPorId(f.tercero_id), f.tipo), auto: esAutoRep(f) }; }
+function nuevaLineaF(f) {
+  const t = terPorId(f.tercero_id), cod = codDefecto(t, f.tipo), k = CODIGO[cod];
+  return { id: null, descripcion: "", cuenta: primeraCuenta(f.tipo === "V" ? "700" : "600"), cantidad: 1, precio: 0, iva: k ? k.pct : 0, cod, rec: f.tipo === "V" && t && t.ficha && t.ficha.cod_rec ? t.ficha.cod_rec : "", auto: !!k && (k.tipo === "ue" || k.tipo === "isp") };
+}
 function abrirFactura(id) { const f = S.d.facturas.find(x => x.id === id); if (!f) return; S.fact = { f: { ...f }, ls: lineasF(f).map(l => ({ ...l })) }; S.selFact = id; if (!S.fact.ls.length) S.fact.ls.push(nuevaLineaF(S.fact.f)); render(); }
 async function guardarFactura() {
   const { f, ls } = S.fact; const fila = x => (x === "" || x === undefined) ? null : x;
-  const fdb = { id: f.id, empresa_id: S.emp.id, tipo: f.tipo, numero: f.numero, tercero_id: f.tercero_id || null, num_externo: fila(f.num_externo), fecha_emision: fila(f.fecha_emision), fecha_registro: fila(f.fecha_registro), fecha_iva: fila(f.fecha_iva || f.fecha_registro), fecha_vencimiento: fila(f.fecha_vencimiento), estado: f.estado, asiento_id: f.asiento_id || null, notas: fila(f.notas), retencion_tipo: f.tipo === "C" ? fila(f.retencion_tipo) : null, retencion_pct: f.tipo === "C" && f.retencion_tipo ? (+f.retencion_pct || 0) : 0 };
-  const ldb = ls.filter(l => (l.descripcion || l.cuenta) && (+l.precio || +l.cantidad)).map((l, i) => ({ id: l.id || uid(), factura_id: f.id, empresa_id: S.emp.id, orden: i, descripcion: l.descripcion || null, cuenta: l.cuenta || null, cantidad: +l.cantidad || 0, precio: +l.precio || 0, iva: +l.iva || 0 }));
+  const fdb = { id: f.id, empresa_id: S.emp.id, tipo: f.tipo, numero: f.numero, tercero_id: f.tercero_id || null, num_externo: fila(f.num_externo), fecha_emision: fila(f.fecha_emision), fecha_registro: fila(f.fecha_registro), fecha_iva: fila(f.fecha_iva || f.fecha_registro), fecha_vencimiento: fila(f.fecha_vencimiento), estado: f.estado, asiento_id: f.asiento_id || null, notas: fila(f.notas), retencion_tipo: f.tipo === "C" ? fila(f.retencion_tipo) : null, retencion_pct: (f.cod_ret || (f.tipo === "C" && f.retencion_tipo)) ? (+f.retencion_pct || 0) : 0, cod_ret: fila(f.cod_ret) };
+  const ldb = ls.filter(l => (l.descripcion || l.cuenta) && (+l.precio || +l.cantidad)).map((l, i) => ({ id: l.id || uid(), factura_id: f.id, empresa_id: S.emp.id, orden: i, descripcion: l.descripcion || null, cuenta: l.cuenta || null, cantidad: +l.cantidad || 0, precio: +l.precio || 0, iva: +l.iva || 0, cod_iva: l.cod || null, cod_rec: l.rec || null }));
   await db.guardarFactura(fdb, ldb);
   S.d = await db.cargar(S.emp.id); S.fact = { f: { ...S.d.facturas.find(x => x.id === f.id) }, ls: lineasF(f).map(l => ({ ...l })) };
   if (!S.fact.ls.length) S.fact.ls.push(nuevaLineaF(S.fact.f));
@@ -540,17 +567,30 @@ async function registrarFactura() {
   validas.forEach((l, i) => { if (!cuentaValida(l.cuenta)) err.push("Línea " + (i + 1) + ": la cuenta " + (l.cuenta || "(vacía)") + " no existe o no es de movimiento (9 dígitos)."); });
   const ctrl = t ? (t.cuenta || "") : "";
   if (t && !cuentaValida(ctrl)) err.push("El " + (cli ? "cliente" : "proveedor") + " no tiene una cuenta contable de 9 dígitos válida. Edítelo y guárdelo.");
-  const RET_PREF = { 111: "475100001", 115: "475100003", 123: "475100004" }; // cuenta de retenciones según el modelo
-  const ivaC = cuentaSis(cli ? "477" : "472"), retC = S.d.cuentas.some(c => c.codigo === RET_PREF[f.retencion_tipo]) ? RET_PREF[f.retencion_tipo] : cuentaSis("4751"), necesitaRet = !cli && retDe(f, totalesF(validas).base) > 0;
-  [[ivaC, cli ? "477" : "472"], ...(necesitaRet ? [[retC, "4751"]] : [])].forEach(([c, m]) => { if (!S.d.cuentas.some(x => x.codigo === c) && !S.d.cuentas.some(x => x.codigo === m)) err.push("Falta el título " + m + " en el plan de cuentas. Cargue los títulos del PGC."); });
+  const tot = totalesF(validas), ret = retDe(f, tot.base), cr = CODIGO[codRetEfectivo(f)];
+  if (ret && !cr) err.push("La factura tiene retención pero no un código de retención válido.");
   if (err.length) return alert("No se puede registrar:\n" + err.join("\n"));
-  await asegurarCuenta(ivaC, nombreMaestro(cli ? "477" : "472")); if (necesitaRet) await asegurarCuenta(retC, nombreMaestro("4751")); // cuentas de movimiento de IVA y retenciones, creadas bajo su título si aún no existen
-  const tot = totalesF(validas);
+  // El asiento sale del código de impuestos de cada línea: cuenta de IVA según el código, autorrepercusión (UE e inversión del sujeto pasivo),
+  // recargo de equivalencia y retención. Los apuntes con igual cuenta y lado se agrupan.
+  const ap = [], idx = new Map();
+  const add = (cuenta, imp, lado, extra = {}) => {
+    imp = r2(imp); if (!imp) return; const otro = lado === "debe" ? "haber" : "debe", l = imp > 0 ? lado : otro, key = cuenta + "|" + l + "|" + (extra.tercero_id || "");
+    const ex = idx.get(key); if (ex) ex[l] = r2(ex[l] + Math.abs(imp)); else { const x = { cuenta, concepto: null, debe: 0, haber: 0, ...extra, [l]: Math.abs(imp) }; idx.set(key, x); ap.push(x); }
+  };
+  const gIva = new Map(), gAuto = new Map(); // base por cuenta de IVA y porcentaje (nacional) o por código (autorrepercusión)
+  validas.forEach(l => {
+    const c = codLinea(f, l), b = r2((+l.cantidad || 0) * (+l.precio || 0));
+    add(l.cuenta, b, cli ? "haber" : "debe");
+    if (c.tipo === "nac" || c.tipo === "inv") { const k = c.cta + "|" + c.pct; gIva.set(k, r2((gIva.get(k) || 0) + b)); }
+    else if (c.tipo === "ue" || c.tipo === "isp") gAuto.set(c.cod, r2((gAuto.get(c.cod) || 0) + b));
+    const rc = cli && l.rec ? CODIGO[l.rec] : null; if (rc) add(rc.cta, r2(b * rc.pct / 100), "haber");
+  });
+  gIva.forEach((b, k) => { const [cta, pct] = k.split("|"); add(cta, r2(b * (+pct) / 100), cli ? "haber" : "debe"); });
+  gAuto.forEach((b, cod) => { const c = CODIGO[cod], cuota = r2(b * c.pct / 100); add(c.cta, cuota, "debe"); add(c.cta2, cuota, "haber"); });
+  if (cli) { add(ctrl, r2(tot.total - ret), "debe", { tercero_id: t.id }); if (ret) add(cr.cta, ret, "debe"); }
+  else { add(ctrl, r2(tot.total - ret), "haber", { tercero_id: t.id }); if (ret) add(cr.cta, ret, "haber"); }
+  for (const a of ap) if (!S.d.cuentas.some(c => c.codigo === a.cuenta)) await asegurarCuenta(a.cuenta, nombreBase(a.cuenta)); // cuentas de IVA y retención: se crean bajo su título si aún no existen
   await guardarFactura();
-  const ap = []; const add = (cuenta, imp, lado, extra = {}) => { imp = r2(imp); if (!imp) return; const otro = lado === "debe" ? "haber" : "debe"; const l = imp > 0 ? lado : otro; ap.push({ cuenta, concepto: null, debe: 0, haber: 0, ...extra, [l]: Math.abs(imp) }); };
-  const porCta = new Map(); validas.forEach(l => porCta.set(l.cuenta, r2((porCta.get(l.cuenta) || 0) + r2(l.cantidad * l.precio))));
-  if (cli) { add(ctrl, tot.total, "debe", { tercero_id: t.id }); porCta.forEach((b, c) => add(c, b, "haber")); add(ivaC, tot.cuota, "haber"); }
-  else { const ret = retDe(S.fact.f, tot.base); porCta.forEach((b, c) => add(c, b, "debe")); add(ivaC, tot.cuota, "debe"); add(ctrl, r2(tot.total - ret), "haber", { tercero_id: t.id }); add(retC, ret, "haber"); }
   const concepto = (cli ? "Factura de venta " : "Factura de compra ") + (cli ? f.numero : (f.num_externo || f.numero)) + " " + t.nombre;
   const aid = await db.crearAsiento(S.emp.id, f.fecha_registro, concepto, ap, "factura", f.numero);
   S.fact.f.asiento_id = aid; S.fact.f.estado = "registrado"; await guardarFactura();
@@ -561,14 +601,24 @@ async function registrarFactura() {
 const liqsF = f => S.d.liquidaciones.filter(l => l.factura_id === f.id).sort((a, b) => a.fecha.localeCompare(b.fecha));
 const pagadoF = f => r2(liqsF(f).reduce((a, l) => a + +l.importe, 0));
 // Retenciones de IRPF predefinidas (modelo : porcentaje). El porcentaje se puede cambiar a mano en la factura.
-const RETENCIONES = [["111:15", "Profesionales 15 % (111)"], ["111:7", "Nuevos profesionales 7 % (111)"], ["111:1", "Estimación objetiva 1 % (111)"], ["115:19", "Alquileres 19 % (115)"], ["123:19", "Capital mobiliario 19 % (123)"]];
+// Retención de IRPF de la factura: código de retención (I.* en compras, R.I.* en ventas) y porcentaje editable.
+// Las facturas antiguas solo tienen retencion_tipo (111, 115 o 123) y el porcentaje: se deduce su código.
+const codRetEfectivo = f => f.cod_ret || (f.tipo === "C" && f.retencion_tipo ? (CODIGOS.find(c => c.tipo === "ret" && c.modelo === f.retencion_tipo && +c.pct === +f.retencion_pct) || {}).cod || "" : "");
 function opcionesRetencion(f) {
-  const clave = f.retencion_tipo ? f.retencion_tipo + ":" + (+f.retencion_pct || 0) : "";
-  const lista = [["", "Ninguna"], ...RETENCIONES];
-  if (clave && !lista.some(x => x[0] === clave)) lista.push([clave, "Modelo " + f.retencion_tipo + " (" + (+f.retencion_pct || 0) + " %)"]);
-  return lista.map(([v, n]) => `<option value="${v}" ${v === clave ? "selected" : ""}>${n}</option>`).join("");
+  const ef = codRetEfectivo(f);
+  return `<option value=""></option>` + codsRet(f.tipo).map(c => `<option value="${esc(c.cod)}" ${c.cod === ef ? "selected" : ""}>${esc(c.cod)} · ${String(c.pct).replace(".", ",")} %</option>`).join("");
 }
-const retDe = (f, base) => (f.tipo === "C" && f.retencion_tipo) ? r2(base * (+f.retencion_pct || 0) / 100) : 0; // retención IRPF practicada al proveedor
+const retDe = (f, base) => (f.cod_ret || (f.tipo === "C" && f.retencion_tipo)) ? r2(base * (+f.retencion_pct || 0) / 100) : 0; // retención de IRPF (practicada al proveedor o que nos practica el cliente)
+// combinaciones de impuestos: las preparadas más las propias de la empresa (se guardan en modelos_manual con modelo "combos")
+const combosPropias = () => (((S.d.manual || []).find(m => m.modelo === "combos") || {}).datos || {}).lista || [];
+const combos = tipo => [...COMBINACIONES, ...combosPropias()].filter(c => !tipo || c.lado === tipo);
+const comboDe = id => combos().find(c => c.id === id);
+function aplicarRet(F, cod) { const c = CODIGO[cod]; F.cod_ret = c ? cod : ""; F.retencion_pct = c ? c.pct : 0; F.retencion_tipo = c && F.tipo === "C" ? c.modelo : ""; }
+function aplicarCombo(F, ls, c) { // pone el código de IVA en todas las líneas, el recargo (ventas) y la retención
+  const k = CODIGO[c.iva]; F.comb = c.id;
+  ls.forEach(l => { l.cod = c.iva; l.iva = k ? k.pct : 0; l.auto = !!k && (k.tipo === "ue" || k.tipo === "isp"); l.rec = F.tipo === "V" ? (c.rec || "") : ""; l.tocado = true; });
+  aplicarRet(F, c.ret || "");
+}
 const retF = f => retDe(f, totalesF(lineasF(f)).base);
 const netoF = f => r2(totalesF(lineasF(f)).total - retF(f));
 const pendienteF = f => r2(netoF(f) - pagadoF(f));
@@ -631,12 +681,20 @@ function facturasIva(tipo, per) {
   const [d, h] = rangoPeriodo(per);
   return S.d.facturas.filter(f => f.tipo === tipo && estadoF(f) === "Registrado" && fechaIva(f) >= d && fechaIva(f) <= h).sort((a, b) => fechaIva(a).localeCompare(fechaIva(b)) || a.numero.localeCompare(b.numero));
 }
-function desgloseF(f) { // base y cuota por tipo de IVA de una factura
-  const m = new Map([[0, 0], [4, 0], [10, 0], [21, 0]]);
-  lineasF(f).forEach(l => { const k = +l.iva || 0; m.set(k, r2((m.get(k) || 0) + r2((+l.cantidad || 0) * (+l.precio || 0)))); });
-  const out = {}; let total = 0; const auto = esAutoRep(f);
-  m.forEach((b, k) => { const c = r2(b * k / 100); out[k] = { base: b, cuota: c }; total = r2(total + b + (auto ? 0 : c)); });
-  return { ...out, total, auto };
+// Desglose de una factura por código de impuestos: base y cuota por tipo de IVA (líneas con IVA en la factura), adquisiciones intracomunitarias
+// (ue) e inversión del sujeto pasivo (isp), que se autorrepercuten, recargo de equivalencia y entregas a la UE (ventasUE).
+function desgloseF(f) {
+  const out = {}; [0, 2, 4, 5, 10, 21].forEach(k => { out[k] = { base: 0, cuota: 0 }; });
+  const ue = { base: 0, cuota: 0, bienes: 0, serv: 0 }, isp = { base: 0, cuota: 0 }, ventasUE = { E: 0, S: 0 }, porCod = new Map(); let rec = 0;
+  lineasF(f).forEach(l => {
+    const c = codLinea(f, l), b = r2((+l.cantidad || 0) * (+l.precio || 0)), pct = +c.pct || 0;
+    if (c.tipo === "ue" || c.tipo === "isp") porCod.set(c.cod, r2((porCod.get(c.cod) || 0) + b));
+    else { (out[pct] = out[pct] || { base: 0, cuota: 0 }).base = r2(out[pct].base + b); if (c.ue) ventasUE[c.ue] = r2(ventasUE[c.ue] + b); }
+    const rc = f.tipo === "V" && l.rec ? CODIGO[l.rec] : null; if (rc) rec = r2(rec + r2(b * rc.pct / 100));
+  });
+  Object.keys(out).forEach(k => { out[k].cuota = r2(out[k].base * (+k) / 100); });
+  porCod.forEach((b, cod) => { const c = CODIGO[cod], cuota = r2(b * c.pct / 100), x = c.tipo === "ue" ? ue : isp; x.base = r2(x.base + b); x.cuota = r2(x.cuota + cuota); if (c.tipo === "ue") { if (c.bien) ue.bienes = r2(ue.bienes + b); else ue.serv = r2(ue.serv + b); } });
+  return { ...out, ue, isp, ventasUE, rec, total: totalesF(lineasF(f)).total };
 }
 const nCSV = n => String(r2(n)).replace(".", ",");
 function descargarCSV(nombre, filas) {
@@ -649,42 +707,49 @@ const selPeriodo = () => `<label>Período<select id="per">${PERIODOS.map(p => `<
 
 function datosLibro() {
   const cli = S.libroIva === "V", L = facturasIva(S.libroIva, S.periodo);
-  const cab = ["Fecha", "Registro", "Nº factura", "NIF", "Nombre", "Base 0 %", "Base 4 %", "Cuota 4 %", "Base 10 %", "Cuota 10 %", "Base 21 %", "Cuota 21 %", "Total"];
-  const tot = [0, 0, 0, 0, 0, 0, 0, 0]; // base0, b4, c4, b10, c10, b21, c21, total
+  const cab = ["Fecha", "Registro", "Nº factura", "NIF", "Nombre", "Base 0 % / exenta", "Base 4 %", "Cuota 4 %", "Base 10 %", "Cuota 10 %", "Base 21 %", "Cuota 21 %", "Base otros tipos", "Cuota otros tipos", "Recargo de equivalencia", "Base autorrepercutida", "IVA autorrepercutido", "Total"];
+  const tot = new Array(13).fill(0); // b0, b4, c4, b10, c10, b21, c21, bOtros, cOtros, recargo, bAuto, cAuto, total
   const filas = L.map(f => { const t = terPorId(f.tercero_id) || {}, d = desgloseF(f);
-    const v = [d[0].base, d[4].base, d[4].cuota, d[10].base, d[10].cuota, d[21].base, d[21].cuota, d.total]; v.forEach((x, i) => { tot[i] = r2(tot[i] + x); });
+    const v = [d[0].base, d[4].base, d[4].cuota, d[10].base, d[10].cuota, d[21].base, d[21].cuota, r2(d[2].base + d[5].base), r2(d[2].cuota + d[5].cuota), d.rec, r2(d.ue.base + d.isp.base), r2(d.ue.cuota + d.isp.cuota), d.total];
+    v.forEach((x, i) => { tot[i] = r2(tot[i] + x); });
     return [fechaIva(f), f.numero, cli ? f.numero : (f.num_externo || ""), t.cif || "", t.nombre || "", ...v]; });
-  return { cab, filas, tot: ["", "", "", "", "Totales", ...tot] };
+  const resumen = { base: r2(tot[0] + tot[1] + tot[3] + tot[5] + tot[7] + tot[10]), cuota: r2(tot[2] + tot[4] + tot[6] + tot[8] + tot[9] + tot[11]), total: tot[12] };
+  return { cab, filas, tot: ["", "", "", "", "Totales", ...tot], resumen };
 }
 V.libroiva = () => {
   const cli = S.libroIva === "V", D = datosLibro();
   const acc = btn("exportar", "Exportar a Excel (CSV)", "", !D.filas.length);
   const fila = r => `<tr>${r.map((c, i) => i >= 5 ? `<td class="n">${sal(c)}</td>` : `<td>${esc(c)}</td>`).join("")}</tr>`;
-  const baseT = r2(D.tot[5] + D.tot[6] + D.tot[8] + D.tot[10]), cuotaT = r2(D.tot[7] + D.tot[9] + D.tot[11]);
-  return pagina("Libros de IVA", acc, `<div class="pagina"><div class="lista"><table><tr>${D.cab.map((c, i) => `<th class="${i >= 5 ? "n" : ""}">${c}</th>`).join("")}</tr>${D.filas.map(fila).join("") || `<tr><td colspan="13" class="vacio">No hay facturas registradas en este período.</td></tr>`}${D.filas.length ? `<tr class="tot">${D.tot.map((c, i) => i >= 5 ? `<td class="n">${eur(c)}</td>` : `<td>${esc(c)}</td>`).join("")}</tr>` : ""}</table></div>
-   <aside class="factbox"><h3>Resumen ${cli ? "repercutido" : "soportado"}</h3><dl><dt>Período</dt><dd>${esc(nomPer())}</dd><dt>Facturas</dt><dd>${D.filas.length}</dd><dt>Base imponible</dt><dd>${eur(baseT)}</dd><dt>Cuota de IVA</dt><dd>${eur(cuotaT)}</dd><dt>Total</dt><dd>${eur(D.tot[12])}</dd></dl></aside></div>`,
+  const baseT = D.resumen.base, cuotaT = D.resumen.cuota;
+  return pagina("Libros de IVA", acc, `<div class="pagina"><div class="lista"><table><tr>${D.cab.map((c, i) => `<th class="${i >= 5 ? "n" : ""}">${c}</th>`).join("")}</tr>${D.filas.map(fila).join("") || `<tr><td colspan="18" class="vacio">No hay facturas registradas en este período.</td></tr>`}${D.filas.length ? `<tr class="tot">${D.tot.map((c, i) => i >= 5 ? `<td class="n">${eur(c)}</td>` : `<td>${esc(c)}</td>`).join("")}</tr>` : ""}</table></div>
+   <aside class="factbox"><h3>Resumen ${cli ? "repercutido" : "soportado"}</h3><dl><dt>Período</dt><dd>${esc(nomPer())}</dd><dt>Facturas</dt><dd>${D.filas.length}</dd><dt>Base imponible</dt><dd>${eur(baseT)}</dd><dt>Cuota de IVA</dt><dd>${eur(cuotaT)}</dd><dt>Total</dt><dd>${eur(D.resumen.total)}</dd></dl></aside></div>`,
     { tabs: ["Libro registro"], vista: cli ? "IVA repercutido (facturas emitidas)" : "IVA soportado (facturas recibidas)", filtros: `<label>Libro<select id="tl"><option value="V" ${cli ? "selected" : ""}>Repercutido (ventas)</option><option value="C" ${cli ? "" : "selected"}>Soportado (compras)</option></select></label>${selPeriodo()}` });
 };
 
 function datos303(per = S.periodo) {
   const V_ = facturasIva("V", per), C_ = facturasIva("C", per);
-  const dev = { 0: 0, 4: [0, 0], 10: [0, 0], 21: [0, 0] }; let ex0 = 0;
-  V_.forEach(f => { const d = desgloseF(f); ex0 = r2(ex0 + d[0].base); [4, 10, 21].forEach(k => { dev[k][0] = r2(dev[k][0] + d[k].base); dev[k][1] = r2(dev[k][1] + d[k].cuota); }); });
-  let sBase = 0, sCuota = 0, c0 = 0;
-  C_.forEach(f => { const d = desgloseF(f); c0 = r2(c0 + d[0].base); [4, 10, 21].forEach(k => { sBase = r2(sBase + d[k].base); sCuota = r2(sCuota + d[k].cuota); }); });
-  const totDev = r2(dev[4][1] + dev[10][1] + dev[21][1]);
-  return { dev, ex0, sBase, sCuota, c0, totDev, resultado: r2(totDev - sCuota), nV: V_.length, nC: C_.length };
+  const dev = { 4: [0, 0], 10: [0, 0], 21: [0, 0] }; let ex0 = 0, otrosB = 0, otrosC = 0, rec = 0;
+  V_.forEach(f => { const d = desgloseF(f); ex0 = r2(ex0 + d[0].base); [4, 10, 21].forEach(k => { dev[k][0] = r2(dev[k][0] + d[k].base); dev[k][1] = r2(dev[k][1] + d[k].cuota); }); otrosB = r2(otrosB + d[2].base + d[5].base); otrosC = r2(otrosC + d[2].cuota + d[5].cuota); rec = r2(rec + d.rec); });
+  let sBase = 0, sCuota = 0, c0 = 0, adqB = 0, adqC = 0, ispB = 0, ispC = 0;
+  C_.forEach(f => { const d = desgloseF(f); c0 = r2(c0 + d[0].base); [2, 4, 5, 10, 21].forEach(k => { sBase = r2(sBase + d[k].base); sCuota = r2(sCuota + d[k].cuota); }); adqB = r2(adqB + d.ue.base); adqC = r2(adqC + d.ue.cuota); ispB = r2(ispB + d.isp.base); ispC = r2(ispC + d.isp.cuota); });
+  // devengado: tipos 4/10/21 y otros, adquisiciones intracomunitarias (10-11), inversión del sujeto pasivo (12-13) y recargo (16-18)
+  // deducible: operaciones interiores corrientes, incluida la inversión del sujeto pasivo (28-29), y adquisiciones intracomunitarias (36-37)
+  const totDev = r2(dev[4][1] + dev[10][1] + dev[21][1] + otrosC + adqC + ispC + rec), totDed = r2(sCuota + ispC + adqC);
+  return { dev, ex0, otrosB, otrosC, rec, sBase: r2(sBase + ispB), sCuota: r2(sCuota + ispC), adqB, adqC, ispB, ispC, c0, totDev, totDed, resultado: r2(totDev - totDed), nV: V_.length, nC: C_.length };
 }
 V.m303 = () => {
   const D = datos303(), c = (cas, txt, v, extra = "") => `<tr><td style="width:4rem"><b>${cas}</b></td><td>${txt}</td><td class="n">${extra}</td><td class="n">${eur(v)}</td></tr>`;
   const acc = btn("exportar", "Exportar a Excel (CSV)");
-  return pagina("Modelo 303", acc, `<div class="lista"><p class="aviso">Cálculo orientativo a partir de las facturas registradas (régimen general, por fecha de IVA). No sustituye a la presentación en la AEAT: no incluye inversión del sujeto pasivo, adquisiciones intracomunitarias, importaciones ni prorrata.</p>
+  return pagina("Modelo 303", acc, `<div class="lista"><p class="aviso">Cálculo orientativo a partir de las facturas registradas y su código de impuestos (por fecha de IVA). Incluye adquisiciones intracomunitarias, inversión del sujeto pasivo y recargo de equivalencia. No incluye importaciones (DUAs), prorrata ni regularizaciones, y no sustituye a la presentación en la AEAT.</p>
   <h3>IVA devengado</h3><table><tr><th>Casilla</th><th>Concepto</th><th class="n">Base / tipo</th><th class="n">Importe</th></tr>
   ${c("01 · 03", "Régimen general 4 %: base imponible y cuota", D.dev[4][1], eur(D.dev[4][0]))}${c("04 · 06", "Régimen general 10 %: base imponible y cuota", D.dev[10][1], eur(D.dev[10][0]))}${c("07 · 09", "Régimen general 21 %: base imponible y cuota", D.dev[21][1], eur(D.dev[21][0]))}
+  ${D.otrosB || D.otrosC ? c("—", "Otros tipos (2 % y 5 %): base imponible y cuota", D.otrosC, eur(D.otrosB)) : ""}
+  ${c("10 · 11", "Adquisiciones intracomunitarias de bienes y servicios: base y cuota", D.adqC, eur(D.adqB))}${c("12 · 13", "Inversión del sujeto pasivo: base y cuota", D.ispC, eur(D.ispB))}${c("16 · 18", "Recargo de equivalencia: cuota", D.rec)}
   <tr class="tot"><td>27</td><td>Total cuota devengada</td><td></td><td class="n">${eur(D.totDev)}</td></tr></table>
   <h3 style="margin-top:1.2rem">IVA deducible</h3><table><tr><th>Casilla</th><th>Concepto</th><th class="n">Base</th><th class="n">Cuota</th></tr>
-  <tr><td><b>28 · 29</b></td><td>Cuotas soportadas en operaciones interiores corrientes</td><td class="n">${eur(D.sBase)}</td><td class="n">${eur(D.sCuota)}</td></tr>
-  <tr class="tot"><td>45</td><td>Total a deducir</td><td></td><td class="n">${eur(D.sCuota)}</td></tr></table>
+  <tr><td><b>28 · 29</b></td><td>Cuotas soportadas en operaciones interiores corrientes (incluida la inversión del sujeto pasivo)</td><td class="n">${eur(D.sBase)}</td><td class="n">${eur(D.sCuota)}</td></tr>
+  <tr><td><b>36 · 37</b></td><td>Cuotas soportadas en adquisiciones intracomunitarias de bienes y servicios</td><td class="n">${eur(D.adqB)}</td><td class="n">${eur(D.adqC)}</td></tr>
+  <tr class="tot"><td>45</td><td>Total a deducir</td><td></td><td class="n">${eur(D.totDed)}</td></tr></table>
   <h3 style="margin-top:1.2rem">Resultado</h3><table><tr class="tot"><td style="width:4rem">46</td><td>Diferencia (27 − 45)</td><td class="n">${eur(D.resultado)}</td></tr></table>
   <p class="${D.resultado > 0 ? "ko" : "ok"}">${D.resultado > 0 ? "A ingresar" : D.resultado < 0 ? "A compensar o devolver" : "Sin resultado"}: ${eur(Math.abs(D.resultado))} €</p>
   <p style="color:var(--tx2)">Operaciones a tipo 0 %/exentas: ventas ${eur(D.ex0)} € · compras ${eur(D.c0)} € (informativo). Facturas incluidas: ${D.nV} emitidas y ${D.nC} recibidas.</p>${panelLiq("m303")}</div>`,
@@ -712,13 +777,14 @@ function datos390() {
   const suma = f => r2(T.reduce((a, d) => a + f(d), 0));
   const filas = [
     ["Base 4 %", d => d.dev[4][0]], ["Cuota 4 %", d => d.dev[4][1]], ["Base 10 %", d => d.dev[10][0]], ["Cuota 10 %", d => d.dev[10][1]], ["Base 21 %", d => d.dev[21][0]], ["Cuota 21 %", d => d.dev[21][1]],
-    ["Total cuota devengada", d => d.totDev], ["Base deducible (operaciones interiores corrientes)", d => d.sBase], ["Cuota deducible", d => d.sCuota], ["Resultado (devengado − deducible)", d => d.resultado]];
-  const volumen = suma(d => d.dev[4][0] + d.dev[10][0] + d.dev[21][0] + d.ex0), compras = suma(d => d.sBase + d.c0);
+    ["Cuota otros tipos (2 % y 5 %)", d => d.otrosC], ["Adquisiciones intracomunitarias: base", d => d.adqB], ["Adquisiciones intracomunitarias: cuota", d => d.adqC], ["Inversión del sujeto pasivo: base", d => d.ispB], ["Inversión del sujeto pasivo: cuota", d => d.ispC], ["Recargo de equivalencia", d => d.rec],
+    ["Total cuota devengada", d => d.totDev], ["Base deducible (interiores corrientes e inversión del sujeto pasivo)", d => d.sBase], ["Cuota deducible (interiores corrientes e inversión del sujeto pasivo)", d => d.sCuota], ["Cuota deducible adquisiciones intracomunitarias", d => d.adqC], ["Total a deducir", d => d.totDed], ["Resultado (devengado − deducible)", d => d.resultado]];
+  const volumen = suma(d => d.dev[4][0] + d.dev[10][0] + d.dev[21][0] + d.otrosB + d.ex0), compras = suma(d => d.sBase + d.c0 + d.adqB);
   return { T, filas: filas.map(([n, f]) => [n, ...T.map(f), suma(f)]), volumen, compras };
 }
 V.m390 = () => {
-  const D = datos390(), tot = new Set(["Total cuota devengada", "Resultado (devengado − deducible)"]);
-  return pagina("Modelo 390", btn("exportar", "Exportar a Excel (CSV)"), `<div class="lista"><p class="aviso">Resumen anual orientativo calculado con las facturas registradas de cada trimestre. No sustituye a la presentación en la AEAT ni incluye inversión del sujeto pasivo, intracomunitarias, importaciones, prorrata ni regularizaciones.</p>
+  const D = datos390(), tot = new Set(["Total cuota devengada", "Total a deducir", "Resultado (devengado − deducible)"]);
+  return pagina("Modelo 390", btn("exportar", "Exportar a Excel (CSV)"), `<div class="lista"><p class="aviso">Resumen anual orientativo calculado con las facturas registradas de cada trimestre y su código de impuestos. No sustituye a la presentación en la AEAT ni incluye importaciones (DUAs), prorrata ni regularizaciones.</p>
   <table><tr><th>Concepto</th><th class="n">1T</th><th class="n">2T</th><th class="n">3T</th><th class="n">4T</th><th class="n">Año ${S.ej}</th></tr>
   ${D.filas.map(r => `<tr class="${tot.has(r[0]) ? "tot" : ""}"><td>${r[0]}</td>${r.slice(1).map(x => `<td class="n">${sal(x)}</td>`).join("")}</tr>`).join("")}</table>
   <p style="color:var(--tx2)">Volumen de operaciones (ventas, base): ${eur(D.volumen)} € · Compras y gastos (base): ${eur(D.compras)} €</p></div>`, { tabs: ["Resumen anual"], vista: "Ejercicio " + S.ej });
@@ -727,17 +793,20 @@ V.m390 = () => {
 /* Modelo 349: operaciones intracomunitarias (terceros con grupo de impuestos UE) */
 function datos349(per = S.periodo) {
   const m = new Map();
-  [["V", "E"], ["C", "A"]].forEach(([tp, clave]) => facturasIva(tp, per).filter(f => (terPorId(f.tercero_id) || {}).grupo_iva === "UE").forEach(f => {
-    const k = clave + "|" + f.tercero_id, o = m.get(k) || { clave, t: terPorId(f.tercero_id) || {}, base: 0 }; o.base = r2(o.base + totalesF(lineasF(f)).base); m.set(k, o); }));
+  const add = (f, clave, base) => { if (!base) return; const k = clave + "|" + f.tercero_id, o = m.get(k) || { clave, t: terPorId(f.tercero_id) || {}, base: 0 }; o.base = r2(o.base + base); m.set(k, o); };
+  // claves: E entregas de bienes (R.UE), S servicios prestados (R.UE.S), A adquisiciones de bienes (S.UE.* de mercancías), I servicios adquiridos (S.UE.* de servicios)
+  facturasIva("V", per).forEach(f => { const d = desgloseF(f); add(f, "E", d.ventasUE.E); add(f, "S", d.ventasUE.S); });
+  facturasIva("C", per).forEach(f => { const d = desgloseF(f); add(f, "A", d.ue.bienes); add(f, "I", d.ue.serv); });
   const filas = [...m.values()].sort((a, b) => a.clave.localeCompare(b.clave) || (a.t.nombre || "").localeCompare(b.t.nombre || ""));
-  return { filas, E: r2(filas.filter(o => o.clave === "E").reduce((a, o) => a + o.base, 0)), A: r2(filas.filter(o => o.clave === "A").reduce((a, o) => a + o.base, 0)) };
+  const totC = c => r2(filas.filter(o => o.clave === c).reduce((a, o) => a + o.base, 0));
+  return { filas, E: totC("E"), S: totC("S"), A: totC("A"), I: totC("I") };
 }
 V.m349 = () => {
   const D = datos349();
-  return pagina("Modelo 349", btn("exportar", "Exportar a Excel (CSV)", "", !D.filas.length), `<div class="lista"><p class="aviso">Operaciones con terceros marcados con grupo de impuestos UE: clientes = entregas (clave E) y proveedores = adquisiciones (clave A). No distingue prestaciones de servicios (S/I), triangulares ni rectificaciones, y el NIF-IVA es el NIF del tercero. No sustituye a la presentación en la AEAT.</p>
+  return pagina("Modelo 349", btn("exportar", "Exportar a Excel (CSV)", "", !D.filas.length), `<div class="lista"><p class="aviso">Operaciones intracomunitarias según el código de impuestos de cada línea: E entregas de bienes y S servicios prestados (ventas con código R.UE o R.UE.S), A adquisiciones de bienes e I servicios adquiridos (compras con código S.UE.*). No incluye operaciones triangulares ni rectificaciones, y el NIF-IVA es el NIF del tercero. No sustituye a la presentación en la AEAT.</p>
   <table><tr><th>Clave</th><th>NIF-IVA</th><th>Nombre</th><th class="n">Base imponible</th></tr>
   ${D.filas.map(o => `<tr><td>${o.clave}</td><td>${esc(o.t.cif || "")}</td><td>${esc(o.t.nombre || "")}</td><td class="n">${eur(o.base)}</td></tr>`).join("") || `<tr><td colspan="4" class="vacio">No hay operaciones intracomunitarias en este período.</td></tr>`}
-  ${D.filas.length ? `<tr class="tot"><td colspan="3">Total entregas (E)</td><td class="n">${eur(D.E)}</td></tr><tr class="tot"><td colspan="3">Total adquisiciones (A)</td><td class="n">${eur(D.A)}</td></tr>` : ""}</table></div>`, { tabs: ["Declaración recapitulativa"], vista: nomPer(), filtros: selPeriodo() });
+  ${D.filas.length ? [["E", "Total entregas de bienes (E)", D.E], ["S", "Total servicios prestados (S)", D.S], ["A", "Total adquisiciones de bienes (A)", D.A], ["I", "Total servicios adquiridos (I)", D.I]].filter(x => x[2]).map(x => `<tr class="tot"><td colspan="3">${x[1]}</td><td class="n">${eur(x[2])}</td></tr>`).join("") : ""}</table></div>`, { tabs: ["Declaración recapitulativa"], vista: nomPer(), filtros: selPeriodo() });
 };
 
 /* Modelos 111, 115 y 123: retenciones practicadas en facturas de proveedor registradas */
@@ -784,7 +853,7 @@ function exportarActual() {
     return descargarCSV(base + "modelo" + tipo + "_" + S.periodo + "_" + S.ej + ".csv", [...cab, ...filas, ...det]);
   }
   if (S.vista === "libroiva") { const D = datosLibro(); descargarCSV(base + (S.libroIva === "V" ? "IVA_repercutido_" : "IVA_soportado_") + S.periodo + "_" + S.ej + ".csv", [D.cab, ...D.filas.map(r => r.map((c, i) => i >= 5 ? nCSV(c) : c)), D.tot.map((c, i) => i >= 5 ? nCSV(c) : c)]); }
-  else if (S.vista === "m303") { const D = datos303(); descargarCSV(base + "modelo303_" + S.periodo + "_" + S.ej + ".csv", [["Casilla", "Concepto", "Base", "Importe"], ["01/03", "Devengado 4 %", nCSV(D.dev[4][0]), nCSV(D.dev[4][1])], ["04/06", "Devengado 10 %", nCSV(D.dev[10][0]), nCSV(D.dev[10][1])], ["07/09", "Devengado 21 %", nCSV(D.dev[21][0]), nCSV(D.dev[21][1])], ["27", "Total cuota devengada", "", nCSV(D.totDev)], ["28/29", "Deducible operaciones interiores corrientes", nCSV(D.sBase), nCSV(D.sCuota)], ["45", "Total a deducir", "", nCSV(D.sCuota)], ["46", "Diferencia", "", nCSV(D.resultado)]]); }
+  else if (S.vista === "m303") { const D = datos303(); descargarCSV(base + "modelo303_" + S.periodo + "_" + S.ej + ".csv", [["Casilla", "Concepto", "Base", "Importe"], ["01/03", "Devengado 4 %", nCSV(D.dev[4][0]), nCSV(D.dev[4][1])], ["04/06", "Devengado 10 %", nCSV(D.dev[10][0]), nCSV(D.dev[10][1])], ["07/09", "Devengado 21 %", nCSV(D.dev[21][0]), nCSV(D.dev[21][1])], ["10/11", "Adquisiciones intracomunitarias", nCSV(D.adqB), nCSV(D.adqC)], ["12/13", "Inversión del sujeto pasivo", nCSV(D.ispB), nCSV(D.ispC)], ["16/18", "Recargo de equivalencia", "", nCSV(D.rec)], ["27", "Total cuota devengada", "", nCSV(D.totDev)], ["28/29", "Deducible operaciones interiores corrientes e ISP", nCSV(D.sBase), nCSV(D.sCuota)], ["36/37", "Deducible adquisiciones intracomunitarias", nCSV(D.adqB), nCSV(D.adqC)], ["45", "Total a deducir", "", nCSV(D.totDed)], ["46", "Diferencia", "", nCSV(D.resultado)]]); }
   else if (S.vista === "m347") { const D = datos347(), f = (t, L) => L.map(o => [t, o.t.cif || "", o.t.nombre || "", ...o.q.map(nCSV), nCSV(o.total)]); descargarCSV(base + "modelo347_" + S.ej + ".csv", [["Tipo", "NIF", "Nombre", "1T", "2T", "3T", "4T", "Total"], ...f("Cliente", D.cli), ...f("Proveedor", D.pro)]); }
 }
 
@@ -800,6 +869,24 @@ V.codigos = () => {
    ${sel.dir === "ambos" ? `<p style="color:var(--tx2)">Autorrepercusión: se registra el IVA soportado en ${esc(sel.cta)} y el repercutido en ${esc(sel.cta2)}; al proveedor solo se le debe la base.</p>` : ""}` : `<p style="color:var(--tx2)">Seleccione un código.</p>`}</aside></div>`,
     { tabs: ["Lista"], filtros: `<label>Mostrar<select id="fcod"><option value="todos" ${f === "todos" ? "selected" : ""}>Todos</option><option value="C" ${f === "C" ? "selected" : ""}>Solo compras</option><option value="V" ${f === "V" ? "selected" : ""}>Solo ventas</option><option value="soportado" ${f === "soportado" ? "selected" : ""}>Impuesto soportado</option><option value="repercutido" ${f === "repercutido" ? "selected" : ""}>Impuesto repercutido</option><option value="ambos" ${f === "ambos" ? "selected" : ""}>Autorrepercusión</option><option value="sin" ${f === "sin" ? "selected" : ""}>Sin impuesto</option><option value="practicada" ${f === "practicada" ? "selected" : ""}>Retención practicada</option><option value="soportada" ${f === "soportada" ? "selected" : ""}>Retención soportada</option></select></label>` });
 };
+
+/* Combinaciones de impuestos: IVA + retención + recargo, para elegirlos juntos en facturas y fichas */
+V.combos = () => {
+  const L = combos(), propias = new Set(combosPropias().map(c => c.id)), sel = L.find(c => c.id === S.selCombo), F = S.comboForm;
+  const txt = cod => { const c = CODIGO[cod]; return c ? c.cod + (c.pct ? " · " + String(c.pct).replace(".", ",") + " %" : "") : ""; };
+  const filas = L.map(c => `<tr data-sel class="${c.id === S.selCombo ? "sel" : ""}" data-a="selcombo" data-id="${esc(c.id)}"><td><b>${esc(c.id)}</b></td><td>${esc(c.nombre)}</td><td>${c.lado === "C" ? "Compras" : "Ventas"}</td><td>${esc(txt(c.iva))}</td><td>${esc(txt(c.ret))}</td><td>${esc(txt(c.rec))}</td><td>${propias.has(c.id) ? "Propia" : "Preparada"}</td></tr>`).join("");
+  const form = F ? `<div class="card"><b>Nueva combinación de impuestos</b><div class="row" style="margin-top:.5rem">
+    <label class="fld">Nombre<input data-cf="nombre" size="40" value="${esc(F.nombre)}"></label>
+    <label class="fld">Operación<select data-cf="lado"><option value="C" ${F.lado === "C" ? "selected" : ""}>Compras</option><option value="V" ${F.lado === "V" ? "selected" : ""}>Ventas</option></select></label>
+    <label class="fld">Código de impuestos<select data-cf="iva">${optsHtml(codsLinea(F.lado).map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]), F.iva)}</select></label>
+    <label class="fld">Código de retención<select data-cf="ret">${optsHtml(codsRet(F.lado).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), F.ret)}</select></label>
+    ${F.lado === "V" ? `<label class="fld">Recargo de equivalencia<select data-cf="rec">${optsHtml(codsRec().map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), F.rec)}</select></label>` : ""}
+    <button class="p" data-a="guardarcombo">Guardar</button><button data-a="cancelarcombo">Cancelar</button></div></div>` : "";
+  return pagina("Combinaciones de impuestos", btn("nuevocombo", "+ Nueva combinación") + btn("delcombo", "Eliminar", "", !sel || !propias.has(sel.id)),
+    `${form}<div class="lista"><table><tr><th>Id.</th><th>Nombre</th><th>Operación</th><th>Código de impuestos</th><th>Retención</th><th>Recargo</th><th>Origen</th></tr>${filas}</table></div>
+    <p style="color:var(--tx2);margin-top:.8rem">Una combinación aplica a la vez el código de IVA, la retención y el recargo. Se elige en la factura o se deja como valor por defecto en la ficha del cliente o proveedor. Las preparadas no se pueden borrar; crea las tuyas con "+ Nueva combinación".</p>`, { tabs: ["Lista"] });
+};
+async function guardarCombos(lista) { const ex = S.d.manual.find(m => m.modelo === "combos"); await db.guardarManual({ id: ex ? ex.id : uid(), empresa_id: S.emp.id, modelo: "combos", ejercicio: 0, periodo: "-", datos: { lista } }); }
 
 /* ---------------- Liquidaciones: IVA (303) y retenciones 111, 115 y 123 ---------------- */
 // Se calculan con los saldos contables del período (no con los modelos), de modo que incluyen también lo registrado a mano (p. ej. DUAs).
@@ -913,7 +1000,11 @@ document.addEventListener("change", async e => {
   const t = e.target;
   try {
     if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
-    else if (t.dataset.tf !== undefined) { setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.type === "number" ? t.value : t.value); }
+    else if (t.dataset.tf !== undefined) {
+      setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.value);
+      if (t.dataset.tf === "ficha.comb") { const c = comboDe(t.value); if (c) { S.terEdit.ficha.cod_iva = c.iva; S.terEdit.ficha.cod_ret = c.ret || ""; S.terEdit.ficha.cod_rec = c.rec || ""; } render(); } // la combinación rellena el código de impuestos, el de retención y el recargo
+    }
+    else if (t.dataset.cf !== undefined) { S.comboForm[t.dataset.cf] = t.value; if (t.dataset.cf === "lado") { S.comboForm.iva = codsLinea(t.value)[0].cod; S.comboForm.ret = ""; S.comboForm.rec = ""; } render(); }
     else if (t.dataset.tl !== undefined) {
       const L = S.terEdit[t.dataset.tl], r = L[+t.dataset.i], k = t.dataset.k;
       r[k] = t.type === "checkbox" ? t.checked : t.value;
@@ -947,11 +1038,20 @@ document.addEventListener("change", async e => {
         const x = t.value.trim() ? terPorCod(t.value) : null, tp = F.tipo === "V" ? "C" : "P";
         if (t.value.trim() && (!x || x.tipo !== tp)) { alert("No existe esa cuenta de " + (tp === "C" ? "cliente." : "proveedor.")); F.tercero_id = null; }
         else {
-          F.tercero_id = x ? x.id : null; S.fact.ls.forEach(l => { l.auto = esAutoRep(F); if (x && !l.tocado && !(+l.precio)) l.iva = ivaDefecto(x, F.tipo); });
+          F.tercero_id = x ? x.id : null;
+          if (x) { // IVA y retención por defecto del tercero: su combinación de impuestos o, si no, su código de impuestos y de retención
+            const fi = x.ficha || {}, cb = fi.comb && comboDe(fi.comb);
+            if (cb && cb.lado === F.tipo && S.fact.ls.every(l => !l.tocado && !(+l.precio))) aplicarCombo(F, S.fact.ls, cb);
+            else {
+              S.fact.ls.forEach(l => { if (!l.tocado && !(+l.precio)) { const cd = codDefecto(x, F.tipo), k = CODIGO[cd]; l.cod = cd; l.iva = k ? k.pct : 0; l.auto = !!k && (k.tipo === "ue" || k.tipo === "isp"); l.rec = F.tipo === "V" ? (fi.cod_rec || "") : ""; } });
+              if (fi.cod_ret && !F.cod_ret) aplicarRet(F, fi.cod_ret);
+            }
+          }
           if (x && (!F.fecha_vencimiento || F.vencAuto)) { const vv = calcVenc(x, F.fecha_emision); if (vv) { F.fecha_vencimiento = vv; F.vencAuto = true; } } // vencimiento según las condiciones de pago del tercero
         }
         render();
-      } else if (k === "retencion_tipo") { const [tp, pc] = t.value.split(":"); F.retencion_tipo = tp || ""; F.retencion_pct = tp ? +pc : 0; render(); }
+      } else if (k === "combo") { const c = comboDe(t.value); if (c) aplicarCombo(F, S.fact.ls, c); else F.comb = ""; render(); }
+      else if (k === "retencion_tipo") { aplicarRet(F, t.value); F.comb = ""; render(); }
       else if (k === "retencion_pct") { F.retencion_pct = +num(t.value) || 0; refrescaF(); }
       else {
         F[k] = t.value; if (k === "fecha_registro") F.fecha_iva = t.value; if (k === "fecha_vencimiento") F.vencAuto = false;
@@ -960,7 +1060,9 @@ document.addEventListener("change", async e => {
     }
     else if (t.dataset.fl !== undefined) {
       const l = S.fact.ls[+t.dataset.fl], k = t.dataset.k;
-      l[k] = (k === "cantidad" || k === "precio") ? (+num(t.value) || 0) : k === "iva" ? +t.value : t.value; if (k === "iva") l.tocado = true; refrescaF();
+      if (k === "cod") { const c = CODIGO[t.value]; l.cod = t.value; l.iva = c ? c.pct : 0; l.auto = !!c && (c.tipo === "ue" || c.tipo === "isp"); l.tocado = true; S.fact.f.comb = ""; }
+      else l[k] = (k === "cantidad" || k === "precio") ? (+num(t.value) || 0) : t.value;
+      refrescaF();
     }
     else if (t.dataset.j !== undefined) {
       const ls = lineasLibro(), i = +t.dataset.j, k = t.dataset.k; let l = ls[i], nueva = false;
@@ -1077,6 +1179,16 @@ document.addEventListener("click", async e => {
     /* clientes y proveedores */
     else if (a === "exportar") { exportarActual(); }
     else if (a === "selcod") { S.selCod = b.dataset.id; render(); }
+    else if (a === "selcombo") { S.selCombo = b.dataset.id; render(); }
+    else if (a === "nuevocombo") { S.comboForm = { nombre: "", lado: "C", iva: "S.NC.NR", ret: "", rec: "" }; render(); }
+    else if (a === "cancelarcombo") { S.comboForm = null; render(); }
+    else if (a === "guardarcombo") {
+      const F = S.comboForm; if (!F.nombre.trim()) return alert("Falta el nombre de la combinación.");
+      if (!CODIGO[F.iva]) return alert("Elija el código de impuestos.");
+      await guardarCombos([...combosPropias(), { id: "X-" + uid().slice(0, 6).toUpperCase(), nombre: F.nombre.trim(), lado: F.lado, iva: F.iva, ret: F.ret || "", rec: F.lado === "V" ? (F.rec || "") : "" }]);
+      S.comboForm = null; await recargar();
+    }
+    else if (a === "delcombo") { const c = combosPropias().find(x => x.id === S.selCombo); if (c && confirm("¿Eliminar la combinación «" + c.nombre + "»?")) { await guardarCombos(combosPropias().filter(x => x.id !== c.id)); S.selCombo = ""; await recargar(); } }
     else if (a === "generarliq") {
       const k = b.dataset.k, P = liqPropuesta(k), fecha = document.getElementById("liq-fecha").value;
       if (!fecha) return alert("Falta la fecha del asiento.");
@@ -1139,7 +1251,9 @@ document.addEventListener("click", async e => {
     else if (a === "nuevafact") {
       const tp = b.dataset.t, pre = b.dataset.ter || "";
       const f = { id: uid(), empresa_id: S.emp.id, tipo: tp, numero: siguienteFact(tp), tercero_id: pre || null, num_externo: "", fecha_emision: hoy(), fecha_registro: hoy(), fecha_iva: hoy(), fecha_vencimiento: calcVenc(terPorId(pre), hoy()), vencAuto: true, estado: "abierto", asiento_id: null, notas: "", retencion_tipo: "", retencion_pct: 0 };
-      S.vista = tp === "V" ? "fventa" : "fcompra"; S.fact = { f, ls: [nuevaLineaF(f)] }; render();
+      S.vista = tp === "V" ? "fventa" : "fcompra"; S.fact = { f, ls: [nuevaLineaF(f)] };
+      { const t0 = terPorId(pre), fi = (t0 && t0.ficha) || {}, cb = fi.comb && comboDe(fi.comb); if (cb && cb.lado === tp) aplicarCombo(f, S.fact.ls, cb); else if (fi.cod_ret) aplicarRet(f, fi.cod_ret); }
+      render();
     }
     else if (a === "selfact") { S.selFact = b.dataset.id; render(); }
     else if (a === "abrirfact") { abrirFactura(b.dataset.id || S.selFact); }

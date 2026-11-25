@@ -81,3 +81,41 @@ const DIRECCION = { nac: c => c.lado === "C" ? "soportado" : "repercutido", inv:
 CODIGOS.forEach(c => { if (!c.dir) c.dir = DIRECCION[c.tipo](c); });
 export const DIR_NOMBRE = { soportado: "Impuesto soportado", repercutido: "Impuesto repercutido", ambos: "Soportado y repercutido (autorrepercusión)", sin: "Sin impuesto", practicada: "Retención practicada", soportada: "Retención soportada (cobrada)" };
 export const CODIGO = Object.fromEntries(CODIGOS.map(c => [c.cod, c]));
+
+// Combinaciones de impuestos (como los grupos de impuestos de D365): un código de IVA + una retención + un recargo opcionales.
+// Al elegir una combinación en una factura (o en la ficha del cliente o proveedor) se aplican a la vez el IVA y la retención.
+export const COMBINACIONES = [
+  // Compras
+  { id: "C-21",       nombre: "Compra nacional 21 %",                                  lado: "C", iva: "S.NC.NR" },
+  { id: "C-10",       nombre: "Compra nacional 10 %",                                  lado: "C", iva: "S.NC.RD" },
+  { id: "C-4",        nombre: "Compra nacional 4 %",                                   lado: "C", iva: "S.NC.SR" },
+  { id: "C-EX",       nombre: "Compra nacional exenta",                                lado: "C", iva: "S.NC.EX" },
+  { id: "C-NS",       nombre: "Compra nacional no sujeta",                             lado: "C", iva: "S.NAC.NS" },
+  { id: "C-PROF-15",  nombre: "Profesional: IVA 21 % y retención 15 %",                lado: "C", iva: "S.NC.NR", ret: "I.PR.GN" },
+  { id: "C-PROF-7",   nombre: "Nuevo profesional: IVA 21 % y retención 7 %",           lado: "C", iva: "S.NC.NR", ret: "I.PR.PRA" },
+  { id: "C-PROF-1",   nombre: "Profesional (estimación objetiva): IVA 21 % y retención 1 %", lado: "C", iva: "S.NC.NR", ret: "I.PR.SR" },
+  { id: "C-ALQ-19",   nombre: "Alquiler: IVA 21 % y retención 19 %",                   lado: "C", iva: "S.NC.NR", ret: "I.ALQ" },
+  { id: "C-ALQ-EX",   nombre: "Alquiler exento de IVA y retención 19 %",               lado: "C", iva: "S.NC.EX", ret: "I.ALQ" },
+  { id: "C-DIV",      nombre: "Dividendos: sin IVA y retención 19 %",                  lado: "C", iva: "S.NAC.NS", ret: "I.DV" },
+  { id: "C-INT",      nombre: "Intereses: sin IVA y retención 19 %",                   lado: "C", iva: "S.NAC.NS", ret: "I.INT" },
+  { id: "C-UE-B",     nombre: "Compra UE de mercancías 21 % (autorrepercusión)",       lado: "C", iva: "S.UE.NR" },
+  { id: "C-UE-S",     nombre: "Compra UE de servicios 21 % (autorrepercusión)",        lado: "C", iva: "S.UE.NR.SR" },
+  { id: "C-ISP",      nombre: "Compra con inversión del sujeto pasivo 21 %",           lado: "C", iva: "S.ISP.NR" },
+  { id: "C-IMP",      nombre: "Compra a tercer país (IVA por el DUA)",                 lado: "C", iva: "S.EX.NR" },
+  { id: "C-INV",      nombre: "Bien de inversión 21 %",                                lado: "C", iva: "IN.NR" },
+  // Ventas
+  { id: "V-21",       nombre: "Venta nacional 21 %",                                   lado: "V", iva: "R.NC.NR" },
+  { id: "V-10",       nombre: "Venta nacional 10 %",                                   lado: "V", iva: "R.NC.RD" },
+  { id: "V-4",        nombre: "Venta nacional 4 %",                                    lado: "V", iva: "R.NC.SR" },
+  { id: "V-EX",       nombre: "Venta nacional exenta",                                 lado: "V", iva: "R.NC.EX" },
+  { id: "V-NS",       nombre: "Venta nacional no sujeta",                              lado: "V", iva: "R.NAC.NS" },
+  { id: "V-21-RE",    nombre: "Venta 21 % con recargo de equivalencia 5,2 %",          lado: "V", iva: "R.NC.NR", rec: "R.RC.NR" },
+  { id: "V-10-RE",    nombre: "Venta 10 % con recargo de equivalencia 1,4 %",          lado: "V", iva: "R.NC.RD", rec: "R.RC.RD" },
+  { id: "V-4-RE",     nombre: "Venta 4 % con recargo de equivalencia 0,5 %",           lado: "V", iva: "R.NC.SR", rec: "R.RC.SR" },
+  { id: "V-ALQ-19",   nombre: "Alquiler cobrado: IVA 21 % y retención 19 %",           lado: "V", iva: "R.NC.NR", ret: "R.I.ALQ" },
+  { id: "V-ALQ-EX",   nombre: "Alquiler cobrado exento y retención 19 %",              lado: "V", iva: "R.NC.EX", ret: "R.I.ALQ" },
+  { id: "V-INT",      nombre: "Intereses cobrados: sin IVA y retención 19 %",          lado: "V", iva: "R.NAC.NS", ret: "R.I.INT" },
+  { id: "V-UE-B",     nombre: "Entrega intracomunitaria de mercancías (exenta)",       lado: "V", iva: "R.UE" },
+  { id: "V-UE-S",     nombre: "Servicios a la UE (exentos)",                           lado: "V", iva: "R.UE.S" },
+  { id: "V-EXP",      nombre: "Exportación (exenta)",                                  lado: "V", iva: "R.EX" }
+];
