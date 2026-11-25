@@ -1,0 +1,25 @@
+:root{--c:#1f3a5f;--c2:#e8eef6;--bd:#d5dbe3;--ok:#1b7f4c;--ko:#b3261e;font-size:clamp(13px,1vw + 6px,17px)}
+*{box-sizing:border-box}
+body{margin:0;font-family:Segoe UI,system-ui,sans-serif;background:#f5f7fa;color:#1c2430}
+header{background:var(--c);color:#fff;display:flex;gap:1rem;align-items:center;padding:.5rem 1rem;flex-wrap:wrap}
+header h1{font-size:1.1rem;margin:0 1rem 0 0}
+header select,header button{font-size:.9rem}
+nav{display:flex;gap:.25rem;flex-wrap:wrap}
+nav button{background:transparent;color:#fff;border:0;padding:.45rem .8rem;border-radius:6px;cursor:pointer}
+nav button.on,nav button:hover{background:rgba(255,255,255,.18)}
+main{padding:1rem;max-width:1200px;margin:auto}
+h2{margin:.2rem 0 .8rem}
+table{border-collapse:collapse;width:100%;background:#fff}
+th,td{border:1px solid var(--bd);padding:.35rem .5rem;text-align:left}
+th{background:var(--c2)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+input,select,button{font:inherit;padding:.3rem .45rem;border:1px solid var(--bd);border-radius:5px;background:#fff}
+button.p{background:var(--c);color:#fff;border-color:var(--c);cursor:pointer}
+button.d{color:var(--ko);cursor:pointer}
+.card{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:1rem;margin-bottom:1rem}
+.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.6rem}
+.ok{color:var(--ok);font-weight:600}.ko{color:var(--ko);font-weight:600}
+.login{max-width:340px;margin:12vh auto}
+.login input{width:100%;margin:.3rem 0}
+.aviso{background:#fff7e0;border:1px solid #e6cf85;padding:.4rem .8rem;border-radius:6px;font-size:.85rem}
+tr.tot td{font-weight:700;background:var(--c2)}
