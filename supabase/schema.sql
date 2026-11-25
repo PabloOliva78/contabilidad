@@ -56,6 +56,10 @@ create policy asi_all on asientos for all using (exists (select 1 from empresas 
 create policy apu_all on apuntes  for all using (exists (select 1 from empresas e where e.id = empresa_id and e.owner = auth.uid()))
   with check (exists (select 1 from empresas e where e.id = empresa_id and e.owner = auth.uid()));
 
+-- Permisos de API: solo usuarios con sesión iniciada (RLS filtra por dueño)
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on empresas, cuentas, asientos, apuntes to authenticated;
+
 -- Crear asiento de forma atómica: exige que cuadre (debe = haber) y numera correlativamente.
 create or replace function crear_asiento(p_empresa uuid, p_fecha date, p_concepto text, p_origen text, p_apuntes jsonb)
 returns uuid language plpgsql security invoker as $$
@@ -76,3 +80,5 @@ begin
     from jsonb_array_elements(p_apuntes) a;
   return v_id;
 end $$;
+
+grant execute on function crear_asiento(uuid, date, text, text, jsonb) to authenticated;
