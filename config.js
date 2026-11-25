@@ -1,5 +1,4 @@
-// Rellena con los datos de TU proyecto Supabase nuevo (Settings > API).
-// Solo la clave "anon/publishable". NUNCA la service_role.
-// Si se deja vacío, el programa funciona en MODO LOCAL (datos en este navegador) para probar.
-export const SUPABASE_URL = "";
-export const SUPABASE_ANON_KEY = "";
+// Proyecto Supabase PROGRAMA CONTABILIDAD. Solo clave publishable (segura en navegador gracias a RLS).
+// NUNCA poner aquí la clave secret / service_role.
+export const SUPABASE_URL = "https://qtzuaskarekhdhxclzny.supabase.co";
+export const SUPABASE_ANON_KEY = "sb_publishable_PATc9cb8p9BStN14NnkNBg_Su7mqsxO";
