@@ -34,13 +34,22 @@ const PGC = [
 
 /* ---------------- Capa de datos (local o Supabase) ---------------- */
 let sb = null, dbNube = null, dbLS = null;
-const TABLAS_LOCAL = ["empresas", "cuentas", "asientos", "apuntes", "lineas", "terceros", "facturas", "flineas", "libros", "liquidaciones", "manual"];
+const TABLAS_LOCAL = ["empresas", "cuentas", "asientos", "apuntes", "lineas", "terceros", "facturas", "flineas", "libros", "liquidaciones", "manual", "almacenes", "articulos", "pedidos", "plineas", "movinv"];
+const upL = (arr, x) => { const i = arr.findIndex(y => y.id === x.id); if (i < 0) arr.push(x); else arr[i] = x; };
 const normaliza = d => { for (const k of TABLAS_LOCAL) d[k] ||= []; return d; };
 // Backend de datos con persistencia intercambiable: el navegador (localStorage) o un archivo de la carpeta de Drive
 const mkLocal = (g, s) => ({
     async empresas() { return g().empresas; },
     async crearEmpresa(nombre, cif) { const d = g(); const e = { id: uid(), nombre, cif }; d.empresas.push(e); s(d); return e; },
-    async cargar(eid) { const d = g(), f = x => x.empresa_id === eid; return { cuentas: d.cuentas.filter(f), asientos: d.asientos.filter(f), apuntes: d.apuntes.filter(f), lineas: d.lineas.filter(f), terceros: d.terceros.filter(f), facturas: d.facturas.filter(f), flineas: d.flineas.filter(f), libros: d.libros.filter(f), liquidaciones: d.liquidaciones.filter(f), manual: d.manual.filter(f) }; },
+    async cargar(eid) { const d = g(), f = x => x.empresa_id === eid; return { cuentas: d.cuentas.filter(f), asientos: d.asientos.filter(f), apuntes: d.apuntes.filter(f), lineas: d.lineas.filter(f), terceros: d.terceros.filter(f), facturas: d.facturas.filter(f), flineas: d.flineas.filter(f), libros: d.libros.filter(f), liquidaciones: d.liquidaciones.filter(f), manual: d.manual.filter(f), almacenes: d.almacenes.filter(f), articulos: d.articulos.filter(f), pedidos: d.pedidos.filter(f), plineas: d.plineas.filter(f), movinv: d.movinv.filter(f) }; },
+    async guardarArticulo(a) { const d = g(); upL(d.articulos, a); s(d); },
+    async borrarArticulo(id) { const d = g(); d.articulos = d.articulos.filter(a => a.id !== id); s(d); },
+    async guardarAlmacen(a) { const d = g(); upL(d.almacenes, a); s(d); },
+    async borrarAlmacen(id) { const d = g(); d.almacenes = d.almacenes.filter(a => a.id !== id); s(d); },
+    async guardarPedido(p, ls) { const d = g(); upL(d.pedidos, p); const ids = new Set(ls.map(l => l.id)); d.plineas = d.plineas.filter(l => l.pedido_id !== p.id || ids.has(l.id)); ls.forEach(l => upL(d.plineas, l)); s(d); },
+    async borrarPedido(id) { const d = g(); d.pedidos = d.pedidos.filter(p => p.id !== id); d.plineas = d.plineas.filter(l => l.pedido_id !== id); s(d); },
+    async guardarMovs(ms) { const d = g(); ms.forEach(m => d.movinv.push(m)); s(d); },
+    async borrarMovs(ids) { const d = g(); const k = new Set(ids); d.movinv = d.movinv.filter(m => !k.has(m.id)); s(d); },
     async guardarManual(m) { const d = g(); d.manual = d.manual.filter(x => !(x.empresa_id === m.empresa_id && x.modelo === m.modelo && x.ejercicio === m.ejercicio && x.periodo === m.periodo)); d.manual.push(m); s(d); },
     async guardarLiquidacion(l) { const d = g(); d.liquidaciones.push(l); s(d); },
     async borrarLiquidacion(id) { const d = g(); d.liquidaciones = d.liquidaciones.filter(l => l.id !== id); s(d); },
@@ -82,7 +91,15 @@ if (LOCAL) {
   dbNube = {
     async empresas() { return ok(await sb.from("empresas").select("*").order("nombre")); },
     async crearEmpresa(nombre, cif) { return ok(await sb.from("empresas").insert({ nombre, cif }).select().single()); },
-    async cargar(eid) { const [cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones, manual] = await Promise.all(["cuentas", "asientos", "apuntes", "diario_lineas", "terceros", "facturas", "factura_lineas", "diario_libros", "liquidaciones", "modelos_manual"].map(t => todo(t, eid))); return { cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones, manual }; },
+    async cargar(eid) { const [cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones, manual, almacenes, articulos, pedidos, plineas, movinv] = await Promise.all(["cuentas", "asientos", "apuntes", "diario_lineas", "terceros", "facturas", "factura_lineas", "diario_libros", "liquidaciones", "modelos_manual", "almacenes", "articulos", "pedidos", "pedido_lineas", "mov_inventario"].map(t => todo(t, eid))); return { cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones, manual, almacenes, articulos, pedidos, plineas, movinv }; },
+    async guardarArticulo(a) { ok(await sb.from("articulos").upsert(a)); },
+    async borrarArticulo(id) { ok(await sb.from("articulos").delete().eq("id", id)); },
+    async guardarAlmacen(a) { ok(await sb.from("almacenes").upsert(a)); },
+    async borrarAlmacen(id) { ok(await sb.from("almacenes").delete().eq("id", id)); },
+    async guardarPedido(p, ls) { ok(await sb.from("pedidos").upsert(p)); const q = sb.from("pedido_lineas").delete().eq("pedido_id", p.id); ok(await (ls.length ? q.not("id", "in", "(" + ls.map(l => l.id).join(",") + ")") : q)); if (ls.length) ok(await sb.from("pedido_lineas").upsert(ls)); },
+    async borrarPedido(id) { ok(await sb.from("pedidos").delete().eq("id", id)); },
+    async guardarMovs(ms) { if (ms.length) ok(await sb.from("mov_inventario").insert(ms)); },
+    async borrarMovs(ids) { if (ids.length) ok(await sb.from("mov_inventario").delete().in("id", ids)); },
     async guardarManual(m) { ok(await sb.from("modelos_manual").upsert(m, { onConflict: "empresa_id,modelo,ejercicio,periodo" })); },
     async guardarLiquidacion(l) { ok(await sb.from("liquidaciones").insert(l)); },
     async borrarLiquidacion(id) { ok(await sb.from("liquidaciones").delete().eq("id", id)); },
@@ -149,7 +166,7 @@ const db = new Proxy({}, { get: (_, m) => (...a) => m === "empresas" ? listarEmp
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -224,6 +241,14 @@ const NAV = [
   { g: "Cuentas a pagar", sec: [
     { n: "Proveedores", it: [["proveedores", "Todos los proveedores"]] },
     { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"], ["diariofprov", "Diario de facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] }] },
+  { g: "Ventas y marketing", sec: [
+    { n: "Pedidos de venta", it: [["pventa", "Todos los pedidos de venta"]] }] },
+  { g: "Compras y abastecimiento", sec: [
+    { n: "Pedidos de compra", it: [["pcompra", "Todos los pedidos de compra"]] }] },
+  { g: "Gestión del inventario", sec: [
+    { n: "Artículos", it: [["articulos", "Todos los artículos"]] },
+    { n: "Consultas e informes", sub: [{ n: "Consultas", it: [["existencias", "Existencias disponibles"], ["movinv", "Transacciones de inventario"]] }] },
+    { n: "Configurar", sub: [{ n: "Almacenes", it: [["almacenes", "Almacenes"]] }] }] },
   { g: "Impuestos", sec: [
     { n: "Impuestos indirectos", sub: [{ n: "Impuestos", it: [["codigos", "Códigos de impuestos"], ["combos", "Combinaciones de impuestos"]] }] },
     { n: "Consultas e informes", sub: [{ n: "Libros de impuestos", it: [["libroiva", "Libros de IVA"]] }] },
@@ -233,7 +258,7 @@ const NAV = [
 ];
 const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -656,8 +681,8 @@ function nuevaLineaF(f) {
 function abrirFactura(id) { const f = S.d.facturas.find(x => x.id === id); if (!f) return; S.fact = { f: { ...f }, ls: lineasF(f).map(l => ({ ...l })) }; S.selFact = id; if (!S.fact.ls.length) S.fact.ls.push(nuevaLineaF(S.fact.f)); render(); }
 async function guardarFactura() {
   const { f, ls } = S.fact; const fila = x => (x === "" || x === undefined) ? null : x;
-  const fdb = { id: f.id, empresa_id: S.emp.id, tipo: f.tipo, numero: f.numero, tercero_id: f.tercero_id || null, num_externo: fila(f.num_externo), fecha_emision: fila(f.fecha_emision), fecha_registro: fila(f.fecha_registro), fecha_iva: fila(f.fecha_iva || f.fecha_registro), fecha_vencimiento: fila(f.fecha_vencimiento), estado: f.estado, asiento_id: f.asiento_id || null, notas: fila(f.notas), retencion_tipo: f.tipo === "C" ? fila(f.retencion_tipo) : null, retencion_pct: (f.cod_ret || (f.tipo === "C" && f.retencion_tipo)) ? (+f.retencion_pct || 0) : 0, cod_ret: fila(f.cod_ret) };
-  const ldb = ls.filter(l => (l.descripcion || l.cuenta) && (+l.precio || +l.cantidad)).map((l, i) => ({ id: l.id || uid(), factura_id: f.id, empresa_id: S.emp.id, orden: i, descripcion: l.descripcion || null, cuenta: l.cuenta || null, cantidad: +l.cantidad || 0, precio: +l.precio || 0, iva: +l.iva || 0, cod_iva: l.cod || null, cod_rec: l.rec || null }));
+  const fdb = { id: f.id, empresa_id: S.emp.id, tipo: f.tipo, numero: f.numero, tercero_id: f.tercero_id || null, num_externo: fila(f.num_externo), fecha_emision: fila(f.fecha_emision), fecha_registro: fila(f.fecha_registro), fecha_iva: fila(f.fecha_iva || f.fecha_registro), fecha_vencimiento: fila(f.fecha_vencimiento), estado: f.estado, asiento_id: f.asiento_id || null, notas: fila(f.notas), retencion_tipo: f.tipo === "C" ? fila(f.retencion_tipo) : null, retencion_pct: (f.cod_ret || (f.tipo === "C" && f.retencion_tipo)) ? (+f.retencion_pct || 0) : 0, cod_ret: fila(f.cod_ret), pedido_id: f.pedido_id || null };
+  const ldb = ls.filter(l => (l.descripcion || l.cuenta) && (+l.precio || +l.cantidad)).map((l, i) => ({ id: l.id || uid(), factura_id: f.id, empresa_id: S.emp.id, orden: i, descripcion: l.descripcion || null, cuenta: l.cuenta || null, cantidad: +l.cantidad || 0, precio: +l.precio || 0, iva: +l.iva || 0, cod_iva: l.cod || null, cod_rec: l.rec || null, pedido_linea_id: l.pedido_linea_id || null }));
   await db.guardarFactura(fdb, ldb);
   S.d = await db.cargar(S.emp.id); S.fact = { f: { ...S.d.facturas.find(x => x.id === f.id) }, ls: lineasF(f).map(l => ({ ...l })) };
   if (!S.fact.ls.length) S.fact.ls.push(nuevaLineaF(S.fact.f));
@@ -1046,6 +1071,367 @@ function panelLiq(clave) {
    <div class="row" style="margin-top:.6rem"><button class="p" data-a="generarliq" data-k="${clave}" ${P.cuadra ? "" : "disabled"}>Generar asiento de liquidación</button></div>`}</div>`;
 }
 
+/* ---------------- Inventario y pedidos de compra y de venta (como D365) ---------------- */
+const r3 = n => Math.round((+n + Number.EPSILON) * 1000) / 1000;
+const q3 = n => String(r3(n)).replace(".", ",");
+const ART_TIPOS = ["Artículo", "Servicio"];
+const artPorId = id => S.d.articulos.find(a => a.id === id);
+const artPorCod = c => S.d.articulos.find(a => a.codigo.toLowerCase() === String(c).trim().toLowerCase());
+const almPorId = id => S.d.almacenes.find(a => a.id === id);
+const almNombre = id => (almPorId(id) || {}).nombre || "";
+const movsArt = (aid, alm) => S.d.movinv.filter(m => m.articulo_id === aid && (!alm || m.almacen_id === alm));
+const stockArt = (aid, alm) => r3(movsArt(aid, alm).reduce((a, m) => a + (+m.cantidad), 0));
+function costeMedio(a) { // coste medio ponderado de las entradas (recepciones y ajustes positivos)
+  let q = 0, v = 0; S.d.movinv.forEach(m => { if (m.articulo_id === a.id && (m.tipo === "Recepción" || m.tipo === "Ajuste") && +m.cantidad > 0) { q += +m.cantidad; v += +m.cantidad * (+m.coste || 0); } });
+  return q ? v / q : (+a.precio_compra || 0);
+}
+async function asegurarAlmacen() {
+  if (S.d.almacenes.length) return S.d.almacenes[0];
+  const a = { id: uid(), empresa_id: S.emp.id, codigo: "ALM01", nombre: "Almacén principal", direccion: null };
+  await db.guardarAlmacen(a); S.d.almacenes.push(a); return a;
+}
+function siguienteCod(lista, pref, n = 5) { let m = 0; for (const x of lista) { const k = new RegExp("^" + pref + "(\\d+)$").exec(x.codigo); if (k) m = Math.max(m, +k[1]); } return pref + String(m + 1).padStart(n, "0"); }
+const siguientePed = tipo => { let m = 0; const pf = tipo === "V" ? "PV" : "PC"; for (const p of S.d.pedidos) { if (p.tipo !== tipo) continue; const k = /^P[VC](\d+)$/.exec(p.numero); if (k) m = Math.max(m, +k[1]); } return pf + String(m + 1).padStart(6, "0"); };
+const plineasDe = p => S.d.plineas.filter(l => l.pedido_id === p.id).sort((a, b) => (+a.orden || 0) - (+b.orden || 0));
+const netoPed = (p, l) => (+l.precio || 0) * (1 - (+l.dto_pct || 0) / 100) * (1 - (+p.dto_pct || 0) / 100);
+function totalesPed(p, ls) {
+  return totalesF(ls.map(l => { const c = CODIGO[l.cod_iva] || CODIGO[inferCod(p.tipo, 21)]; return { cantidad: +l.cantidad || 0, precio: netoPed(p, l), iva: c ? c.pct : 0, auto: !!c && (c.tipo === "ue" || c.tipo === "isp"), rec: l.cod_rec || "" }; }));
+}
+const esServ = l => { const a = artPorId(l.articulo_id); return !a || a.tipo === "Servicio"; };
+const recibidoL = l => esServ(l) ? 0 : r3(S.d.movinv.filter(m => m.linea_id === l.id).reduce((a, m) => a + Math.abs(+m.cantidad), 0));
+const facturadoL = l => r3(S.d.flineas.filter(x => x.pedido_linea_id === l.id).reduce((a, x) => a + (+x.cantidad || 0), 0));
+const docsMov = p => [...new Set(S.d.movinv.filter(m => m.pedido_id === p.id).map(m => m.documento))].sort((a, b) => (+String(a).split("-").pop()) - (+String(b).split("-").pop()));
+function estadoPed(p, ls) {
+  if (p.estado === "cancelado") return "Cancelado";
+  const cli = p.tipo === "V", st = ls.filter(l => !esServ(l)), cant = l => +l.cantidad || 0;
+  if (ls.length && ls.every(l => facturadoL(l) >= cant(l) && cant(l) > 0)) return "Facturado";
+  if (ls.some(l => facturadoL(l) > 0)) return "Facturado parcialmente";
+  if (st.length && st.every(l => recibidoL(l) >= cant(l))) return cli ? "Entregado" : "Recibido";
+  if (st.some(l => recibidoL(l) > 0)) return (cli ? "Entregado" : "Recibido") + " parcialmente";
+  return "Pedido abierto";
+}
+const campoE = (et, attr, root, path, o = {}) => {
+  const v = getPath(root, path);
+  if (o.check) return `<label class="chk"><input type="checkbox" data-${attr}="${path}" ${v ? "checked" : ""}> ${et}</label>`;
+  if (o.opts) return `<label class="fld">${et}<select data-${attr}="${path}">${optsHtml(o.opts, v)}</select></label>`;
+  return `<label class="fld">${et}<input data-${attr}="${path}" type="${o.tipo || "text"}" value="${esc(v ?? "")}" ${o.list ? `list="${o.list}"` : ""} ${o.ph ? `placeholder="${esc(o.ph)}"` : ""} ${o.ro ? "disabled" : ""}></label>`;
+};
+
+/* Artículos */
+const artNuevo = () => ({ id: uid(), codigo: siguienteCod(S.d.articulos, "A"), nombre: "", tipo: "Artículo", unidad: "ud", grupo: "", cod_iva_c: "", cod_iva_v: "", cuenta_compra: "", cuenta_venta: "", precio_compra: "0", precio_venta: "0", stock_min: "0", activo: true, ficha: {} });
+function vistaArticulos() {
+  if (S.artEdit) return fichaArticulo();
+  const L = [...S.d.articulos].sort((a, b) => a.codigo.localeCompare(b.codigo)), sel = L.find(a => a.id === S.selArt);
+  const tot = a => a.tipo === "Servicio" ? "" : q3(stockArt(a.id));
+  const filas = L.map(a => `<tr data-sel class="${a.id === S.selArt ? "sel" : ""}" data-a="selart" data-id="${a.id}"><td><a data-a="editart" data-id="${a.id}">${esc(a.codigo)}</a></td><td>${esc(a.nombre)}</td><td>${esc(a.tipo)}</td><td>${esc(a.grupo || "")}</td><td>${esc(a.unidad || "")}</td><td class="n">${eur(a.precio_compra)}</td><td class="n">${eur(a.precio_venta)}</td><td class="n">${tot(a)}</td><td>${a.activo === false ? "Bloqueado" : ""}</td></tr>`).join("");
+  const acc = btn("nuevoart", "+ Nuevo") + btn("editart", "Editar", `data-id="${sel ? sel.id : ""}"`, !sel) + btn("delart", "Eliminar", "", !sel) + SEP + btn("verexist", "Existencias", "", !sel || sel.tipo === "Servicio");
+  return pagina("Todos los artículos", acc, `<div class="pagina"><div class="lista"><table><tr><th>Número de artículo</th><th>Nombre</th><th>Tipo</th><th>Grupo de artículos</th><th>Unidad</th><th class="n">Precio de compra</th><th class="n">Precio de venta</th><th class="n">Existencias</th><th>Estado</th></tr>${filas || `<tr><td colspan="9" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div>
+   <aside class="factbox"><h3>Información del artículo</h3>${sel ? `<dl><dt>Artículo</dt><dd>${esc(sel.codigo)}</dd><dt>Existencias</dt><dd>${sel.tipo === "Servicio" ? "—" : q3(stockArt(sel.id)) + " " + esc(sel.unidad || "")}</dd><dt>Coste medio</dt><dd>${sel.tipo === "Servicio" ? "—" : eur(costeMedio(sel))}</dd><dt>Valor</dt><dd>${sel.tipo === "Servicio" ? "—" : eur(stockArt(sel.id) * costeMedio(sel))}</dd><dt>En pedidos de compra</dt><dd>${q3(pendienteArt(sel, "C"))}</dd><dt>En pedidos de venta</dt><dd>${q3(pendienteArt(sel, "V"))}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione un artículo.</p>`}</aside></div>`);
+}
+const pendienteArt = (a, tipo) => S.d.plineas.filter(l => l.articulo_id === a.id).reduce((s, l) => { const p = S.d.pedidos.find(x => x.id === l.pedido_id); return p && p.tipo === tipo && p.estado !== "cancelado" ? s + Math.max(0, (+l.cantidad || 0) - recibidoL(l)) : s; }, 0);
+function fichaArticulo() {
+  const e = S.artEdit, ctas = movs();
+  const acc = `<button class="p" data-a="guardarart">Guardar</button>` + btn("cancelart", "Cancelar");
+  const gen = `<div class="fgrid"><div class="fcol"><h4>ARTÍCULO</h4>${campoE("Número de artículo", "ae", e, "codigo")}${campoE("Nombre", "ae", e, "nombre")}${campoE("Nombre de búsqueda", "ae", e, "ficha.busqueda")}${campoE("Tipo", "ae", e, "tipo", { opts: ART_TIPOS })}${campoE("Grupo de artículos", "ae", e, "grupo")}${campoE("Descripción", "ae", e, "ficha.descripcion")}</div>
+    <div class="fcol"><h4>UNIDADES</h4>${campoE("Unidad de medida", "ae", e, "unidad", { list: "dlund" })}${campoE("Código de barras", "ae", e, "ficha.ean")}${campoE("Peso (kg)", "ae", e, "ficha.peso", { tipo: "number" })}${campoE("Bloqueado", "ae", e, "bloq", { check: true })}</div></div><datalist id="dlund">${["ud", "kg", "l", "m", "m²", "t", "caja", "h"].map(u => `<option value="${u}">`).join("")}</datalist>`;
+  const comp = `<div class="fgrid"><div class="fcol"><h4>COMPRAS</h4>${campoE("Precio de compra", "ae", e, "precio_compra", { tipo: "number" })}${campoE("Código de impuestos (compras)", "ae", e, "cod_iva_c", { opts: codsLinea("C").map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campoE("Cuenta de gastos (9 dígitos)", "ae", e, "cuenta_compra", { list: "dlcta", ph: "600…" })}${campoE("Proveedor principal", "ae", e, "ficha.proveedor", { list: "dlprov" })}</div></div>`;
+  const vent = `<div class="fgrid"><div class="fcol"><h4>VENTAS</h4>${campoE("Precio de venta", "ae", e, "precio_venta", { tipo: "number" })}${campoE("Código de impuestos (ventas)", "ae", e, "cod_iva_v", { opts: codsLinea("V").map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campoE("Cuenta de ingresos (9 dígitos)", "ae", e, "cuenta_venta", { list: "dlcta", ph: "700…" })}</div></div>`;
+  const inv = `<div class="fgrid"><div class="fcol"><h4>INVENTARIO</h4>${campoE("Existencias mínimas", "ae", e, "stock_min", { tipo: "number" })}<label class="fld">Modelo de inventario<input value="Coste medio ponderado" disabled></label></div>
+    <div class="fcol"><h4>EXISTENCIAS ACTUALES</h4>${S.d.articulos.some(a => a.id === e.id) ? S.d.almacenes.map(al => `<label class="fld">${esc(al.nombre)}<input disabled value="${q3(stockArt(e.id, al.id))}"></label>`).join("") || "<p>Sin almacenes.</p>" : "<p style='color:var(--tx2)'>Guarde el artículo para ver sus existencias.</p>"}</div></div>`;
+  return pagina("Artículo", acc, `<datalist id="dlcta">${optsCuentas()}</datalist><datalist id="dlprov">${S.d.terceros.filter(t => t.tipo === "P").map(t => `<option value="${esc(t.codigo)}">${esc(t.nombre)}</option>`).join("")}</datalist>${secFicha("a_gen", "General", gen)}${secFicha("a_comp", "Compras", comp)}${secFicha("a_vent", "Ventas", vent)}${e.tipo === "Servicio" ? "" : secFicha("a_inv", "Gestión del inventario", inv)}`, { tabs: ["Ficha"], vista: e.codigo + (e.nombre ? " : " + e.nombre : "") });
+}
+async function guardarArt() {
+  const e = S.artEdit, a = { id: e.id, empresa_id: S.emp.id, codigo: (e.codigo || "").trim(), nombre: (e.nombre || "").trim(), tipo: e.tipo || "Artículo", unidad: (e.unidad || "").trim() || "ud", grupo: (e.grupo || "").trim() || null, cod_iva_c: e.cod_iva_c || null, cod_iva_v: e.cod_iva_v || null, cuenta_compra: (e.cuenta_compra || "").trim() || null, cuenta_venta: (e.cuenta_venta || "").trim() || null, precio_compra: +num(e.precio_compra) || 0, precio_venta: +num(e.precio_venta) || 0, stock_min: +num(e.stock_min) || 0, activo: !e.bloq, ficha: e.ficha || {} };
+  if (!a.codigo || !a.nombre) return alert("Faltan el número y el nombre del artículo.");
+  if (S.d.articulos.some(x => x.id !== a.id && x.codigo.toLowerCase() === a.codigo.toLowerCase())) return alert("Ya existe ese número de artículo.");
+  for (const [c, n] of [[a.cuenta_compra, "de gastos"], [a.cuenta_venta, "de ingresos"]]) if (c && !cuentaValida(c)) return alert("La cuenta " + n + " " + c + " no existe o no es de movimiento (9 dígitos).");
+  await db.guardarArticulo(a); S.artEdit = null; S.selArt = a.id; await recargar();
+}
+V.articulos = vistaArticulos;
+
+/* Almacenes */
+V.almacenes = () => {
+  const L = [...S.d.almacenes].sort((a, b) => a.codigo.localeCompare(b.codigo)), e = S.almEdit;
+  const filas = L.map(a => `<tr data-sel data-a="editalm" data-id="${a.id}" class="${e && e.id === a.id ? "sel" : ""}"><td>${esc(a.codigo)}</td><td>${esc(a.nombre)}</td><td>${esc(a.direccion || "")}</td></tr>`).join("");
+  const form = e ? `<div class="card"><b>${S.d.almacenes.some(a => a.id === e.id) ? "Editar almacén" : "Nuevo almacén"}</b><div class="row" style="margin-top:.5rem"><label>Almacén<br><input data-ak="codigo" size="10" value="${esc(e.codigo)}"></label><label>Nombre<br><input data-ak="nombre" size="26" value="${esc(e.nombre)}"></label><label>Dirección<br><input data-ak="direccion" size="36" value="${esc(e.direccion || "")}"></label><button class="p" data-a="guardaralm">Guardar</button><button data-a="cancelaralm">Cancelar</button></div></div>` : "";
+  return pagina("Almacenes", btn("nuevoalm", "+ Nuevo") + btn("delalm", "Eliminar", "", !(e && S.d.almacenes.some(a => a.id === e.id))), `${form}<div class="pagina"><div class="lista"><table><tr><th>Almacén</th><th>Nombre</th><th>Dirección</th></tr>${filas || `<tr><td colspan="3" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div></div>`);
+};
+
+/* Existencias y transacciones de inventario */
+V.existencias = () => {
+  const f = S.filtroAlm, filas = [];
+  S.d.articulos.filter(a => a.tipo !== "Servicio").sort((a, b) => a.codigo.localeCompare(b.codigo)).forEach(a => {
+    const alms = S.d.almacenes.filter(al => (!f || al.id === f) && movsArt(a.id, al.id).length);
+    const cm = costeMedio(a);
+    (alms.length ? alms : (f ? [] : [null])).forEach(al => { const q = al ? stockArt(a.id, al.id) : 0; filas.push(`<tr class="${q < +a.stock_min ? "ko" : ""}"><td>${esc(a.codigo)}</td><td>${esc(a.nombre)}</td><td>${esc(al ? al.nombre : "")}</td><td class="n">${q3(q)}</td><td>${esc(a.unidad || "")}</td><td class="n">${eur(cm)}</td><td class="n">${eur(q * cm)}</td><td class="n">${q3(a.stock_min)}</td></tr>`); });
+  });
+  const A = S.ajuste;
+  const form = A ? `<div class="card"><b>Ajuste de inventario</b><div class="row" style="margin-top:.5rem">
+    <label>Operación<br><select data-aj="tipo">${optsHtml(["Ajuste", "Transferencia"], A.tipo).replace('<option value=""></option>', "")}</select></label>
+    <label>Artículo<br><input data-aj="art" list="dlart" size="12" value="${esc(A.art)}"></label>
+    <label>${A.tipo === "Transferencia" ? "Almacén origen" : "Almacén"}<br><select data-aj="alm">${optsHtml(S.d.almacenes.map(a => [a.id, a.codigo + " · " + a.nombre]), A.alm).replace('<option value=""></option>', "")}</select></label>
+    ${A.tipo === "Transferencia" ? `<label>Almacén destino<br><select data-aj="alm2">${optsHtml(S.d.almacenes.map(a => [a.id, a.codigo + " · " + a.nombre]), A.alm2)}</select></label>` : ""}
+    <label>Cantidad${A.tipo === "Transferencia" ? "" : " (+ entrada, − salida)"}<br><input data-aj="cant" size="8" value="${esc(A.cant)}"></label>
+    ${A.tipo === "Transferencia" ? "" : `<label>Coste unitario<br><input data-aj="coste" size="8" value="${esc(A.coste)}" placeholder="coste medio"></label>`}
+    <label>Fecha<br><input type="date" data-aj="fecha" value="${esc(A.fecha)}"></label><label>Notas<br><input data-aj="notas" size="22" value="${esc(A.notas)}"></label>
+    <button class="p" data-a="guardaraj">Registrar</button><button data-a="cancelaraj">Cancelar</button></div>
+    <datalist id="dlart">${S.d.articulos.filter(a => a.tipo !== "Servicio").map(a => `<option value="${esc(a.codigo)}">${esc(a.nombre)}</option>`).join("")}</datalist></div>` : "";
+  const totalVal = r2(S.d.articulos.reduce((s, a) => s + stockArt(a.id) * costeMedio(a), 0));
+  return pagina("Existencias disponibles", btn("nuevoaj", "Ajuste de inventario") + btn("verestado", "Transacciones de inventario"), `${form}<div class="pagina"><div class="lista"><table><tr><th>Artículo</th><th>Nombre</th><th>Almacén</th><th class="n">Existencias</th><th>Unidad</th><th class="n">Coste medio</th><th class="n">Valor</th><th class="n">Mínimo</th></tr>${filas.join("") || `<tr><td colspan="8" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}${filas.length ? `<tr class="tot"><td colspan="6">Valor total del inventario</td><td class="n">${eur(totalVal)}</td><td></td></tr>` : ""}</table></div></div>`,
+    { filtros: `<label>Almacén<select id="fal"><option value="">Todos</option>${S.d.almacenes.map(a => `<option value="${a.id}" ${a.id === f ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}</select></label>`, vista: "Existencias" });
+};
+V.movinv = () => {
+  const L = [...S.d.movinv].sort((a, b) => b.fecha.localeCompare(a.fecha) || String(b.creado || "").localeCompare(String(a.creado || ""))).slice(0, 500), sel = L.find(m => m.id === S.selMov);
+  const filas = L.map(m => { const a = artPorId(m.articulo_id) || {}, p = S.d.pedidos.find(x => x.id === m.pedido_id); return `<tr data-sel data-a="selmov" data-id="${m.id}" class="${m.id === S.selMov ? "sel" : ""}"><td>${m.fecha}</td><td>${esc(a.codigo || "")}</td><td>${esc(a.nombre || "")}</td><td>${esc(almNombre(m.almacen_id))}</td><td>${esc(m.tipo)}</td><td class="n">${q3(m.cantidad)}</td><td class="n">${eur(m.coste)}</td><td>${esc(m.documento || "")}</td><td>${esc(p ? p.numero : "")}</td></tr>`; }).join("");
+  return pagina("Transacciones de inventario", btn("eliminarmov", "Eliminar ajuste", "", !sel || !!sel.pedido_id), `<div class="pagina"><div class="lista"><table><tr><th>Fecha</th><th>Artículo</th><th>Nombre</th><th>Almacén</th><th>Tipo</th><th class="n">Cantidad</th><th class="n">Coste unitario</th><th>Documento</th><th>Pedido</th></tr>${filas || `<tr><td colspan="9" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div></div>`);
+};
+async function guardarAjuste() {
+  const A = S.ajuste, a = artPorCod(A.art), cant = r3(+num(A.cant));
+  if (!a || a.tipo === "Servicio") return alert("Elija un artículo de inventario.");
+  if (!A.alm) return alert("Elija el almacén.");
+  if (!cant) return alert("Indique la cantidad.");
+  if (!A.fecha) return alert("Falta la fecha.");
+  const base = { id: null, empresa_id: S.emp.id, fecha: A.fecha, articulo_id: a.id, pedido_id: null, linea_id: null, notas: A.notas || null, creado: new Date().toISOString() };
+  const pf = A.tipo === "Transferencia" ? "TR" : "AJ", docs = new Set(S.d.movinv.filter(m => (m.documento || "").startsWith(pf)).map(m => m.documento)), doc = pf + String(docs.size + 1).padStart(6, "0");
+  let ms;
+  if (A.tipo === "Transferencia") {
+    if (!A.alm2 || A.alm2 === A.alm) return alert("Elija un almacén de destino distinto del de origen.");
+    if (cant < 0) return alert("En una transferencia la cantidad debe ser positiva.");
+    if (stockArt(a.id, A.alm) < cant && !confirm("El almacén de origen tiene " + q3(stockArt(a.id, A.alm)) + " y se transfieren " + q3(cant) + ". ¿Continuar?")) return;
+    const c = r2(costeMedio(a) * 10000) / 10000;
+    ms = [{ ...base, id: uid(), almacen_id: A.alm, tipo: "Transferencia", cantidad: -cant, coste: c, documento: doc }, { ...base, id: uid(), almacen_id: A.alm2, tipo: "Transferencia", cantidad: cant, coste: c, documento: doc }];
+  } else {
+    if (cant < 0 && stockArt(a.id, A.alm) + cant < 0 && !confirm("Las existencias quedarán en negativo (" + q3(stockArt(a.id, A.alm) + cant) + "). ¿Continuar?")) return;
+    const coste = A.coste === "" ? costeMedio(a) : +num(A.coste) || 0;
+    ms = [{ ...base, id: uid(), almacen_id: A.alm, tipo: "Ajuste", cantidad: cant, coste: Math.round(coste * 10000) / 10000, documento: doc }];
+  }
+  await db.guardarMovs(ms); S.ajuste = null; await recargar();
+}
+
+/* Pedidos de compra y de venta */
+const nuevaLineaPed = p => {
+  const t = terPorId(p.tercero_id), cod = codDefecto(t, p.tipo);
+  return { id: uid(), articulo_id: null, descripcion: "", almacen_id: p.almacen_id || null, cantidad: 1, unidad: "", precio: 0, dto_pct: 0, cod_iva: cod, cod_rec: p.tipo === "V" && aplicaRec(t) ? recDeCodigo(cod) : "", tocado: false };
+};
+const fichaPedBase = () => ({ ref: "", modo: "", cond_ent: "", cond: "", forma: "", cod_ret: "", notas: "" });
+function abrirPedido(id) {
+  const p = S.d.pedidos.find(x => x.id === id); if (!p) return;
+  S.ped = { p: { ...p, ficha: { ...fichaPedBase(), ...(p.ficha || {}) } }, ls: plineasDe(p).map(l => ({ ...l })), fechaMov: hoy() }; S.selPed = id; S.tabs.ped = "Líneas"; render();
+}
+function vistaPedidos(tipo) {
+  if (S.ped && S.ped.p.tipo === tipo) return vistaPedidoEdit();
+  const cli = tipo === "V", L = S.d.pedidos.filter(p => p.tipo === tipo).sort((a, b) => b.numero.localeCompare(a.numero)), sel = L.find(p => p.id === S.selPed);
+  const filas = L.map(p => { const t = terPorId(p.tercero_id) || {}, ls = plineasDe(p); return `<tr data-sel class="${p.id === S.selPed ? "sel" : ""}" data-a="selped" data-id="${p.id}"><td><a data-a="abrirped" data-id="${p.id}">${esc(p.numero)}</a></td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td><td>${p.fecha || ""}</td><td>${p.fecha_entrega || ""}</td><td>${esc(almNombre(p.almacen_id))}</td><td>${estadoPed(p, ls)}</td><td>EUR</td><td class="n">${eur(totalesPed(p, ls).total)}</td></tr>`; }).join("");
+  const acc = btn("nuevoped", "+ Nuevo", `data-t="${tipo}"`) + btn("abrirped", "Editar", `data-id="${sel ? sel.id : ""}"`, !sel) + btn("delped", "Eliminar", "", !sel);
+  const fs = sel ? S.d.facturas.filter(f => f.pedido_id === sel.id) : [];
+  return pagina(cli ? "Todos los pedidos de venta" : "Todos los pedidos de compra", acc, `<div class="pagina"><div class="lista"><table><tr><th>${cli ? "Pedido de ventas" : "Pedido de compra"}</th><th>${cli ? "Cuenta de cliente" : "Cuenta de proveedor"}</th><th>${cli ? "Nombre del cliente" : "Nombre del proveedor"}</th><th>Fecha del pedido</th><th>${cli ? "Fecha de entrega" : "Fecha de recepción solicitada"}</th><th>Almacén</th><th>Estado</th><th>Divisa</th><th class="n">Importe</th></tr>${filas || `<tr><td colspan="9" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div>
+   <aside class="factbox"><h3>Detalles del pedido</h3>${sel ? `<dl><dt>Pedido</dt><dd>${esc(sel.numero)}</dd><dt>Estado</dt><dd>${estadoPed(sel, plineasDe(sel))}</dd><dt>Líneas</dt><dd>${plineasDe(sel).length}</dd><dt>Facturas</dt><dd>${fs.map(f => `<a data-a="factdeped" data-id="${f.id}" data-t="${f.tipo}">${esc(f.numero)}</a>`).join(", ") || "—"}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione un pedido.</p>`}</aside></div>`);
+}
+V.pcompra = () => vistaPedidos("C");
+V.pventa = () => vistaPedidos("V");
+function vistaPedidoEdit() {
+  const { p, ls } = S.ped, cli = p.tipo === "V", t = terPorId(p.tercero_id), guardado = S.d.pedidos.some(x => x.id === p.id), canc = p.estado === "cancelado", tab = S.tabs.ped || "Líneas";
+  const est = estadoPed(p, ls), tot = totalesPed(p, ls), hayDocs = guardado && docsMov(p).length > 0;
+  const acc = btn("volverped", "← Pedidos") + btn("guardarped", "Guardar") + SEP + btn("recibirped", cli ? "Registrar entrega" : "Registrar recepción", "", !guardado || canc) + btn("deshacerrec", cli ? "Deshacer última entrega" : "Deshacer última recepción", "", !hayDocs) + SEP + `<button class="p" data-a="facturarped" ${!guardado || canc ? "disabled" : ""}>Generar factura</button>` + SEP + btn("cancelarped", canc ? "Reabrir pedido" : "Cancelar pedido", "", !guardado);
+  const fx = S.d.facturas.filter(f => f.pedido_id === p.id);
+  let cuerpo;
+  if (tab === "Encabezado") {
+    const gen = `<div class="fgrid"><div class="fcol"><h4>${cli ? "PEDIDO DE VENTAS" : "PEDIDO DE COMPRA"}</h4><label class="fld">Pedido<input disabled value="${esc(p.numero)}"></label><label class="fld">Estado<input disabled value="${esc(est)}"></label>${campoE(cli ? "Referencia del cliente" : "Referencia del proveedor", "pe", p, "ficha.ref")}</div>
+      <div class="fcol"><h4>${cli ? "CLIENTE" : "PROVEEDOR"}</h4><label class="fld">Cuenta<input disabled value="${esc(t ? t.codigo : "")}"></label><label class="fld">Nombre<input disabled value="${esc(t ? t.nombre : "")}"></label><label class="fld">NIF<input disabled value="${esc(t ? t.cif || "" : "")}"></label><label class="fld">Grupo de impuestos<input disabled value="${esc(t ? t.grupo_iva : "")}"></label></div></div>`;
+    const ent = `<div class="fgrid"><div class="fcol">${campoE("Almacén", "pe", p, "almacen_id", { opts: S.d.almacenes.map(a => [a.id, a.codigo + " · " + a.nombre]) })}${campoE(cli ? "Fecha de entrega" : "Fecha de recepción solicitada", "pe", p, "fecha_entrega", { tipo: "date" })}${campoE("Modo de entrega", "pe", p, "ficha.modo")}${campoE("Condiciones de entrega", "pe", p, "ficha.cond_ent", { opts: INCOTERMS })}</div></div>`;
+    const pre = `<div class="fgrid"><div class="fcol"><h4>PAGO</h4>${campoE("Condiciones de pago", "pe", p, "ficha.cond", { opts: CONDICIONES.map(c => [c[0], c[1]]) })}${campoE("Forma de pago", "pe", p, "ficha.forma", { opts: FORMAS_PAGO })}</div>
+      <div class="fcol"><h4>DESCUENTO</h4>${campoE("Descuento total (%)", "pe", p, "dto_pct", { tipo: "number" })}</div>
+      <div class="fcol"><h4>IMPUESTOS</h4>${campoE(cli ? "Retención que nos practica el cliente" : "Retención de IRPF", "pe", p, "ficha.cod_ret", { opts: codsRet(p.tipo).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]) })}</div></div>`;
+    cuerpo = `${secFicha("p_gen", "General", gen)}${secFicha("p_ent", "Entrega", ent)}${secFicha("p_pre", "Precio y descuento", pre)}${secFicha("p_not", "Notas", `<div class="fgrid"><div class="fcol">${campoE("Notas internas", "pe", p, "ficha.notas")}</div></div>`)}`;
+  } else {
+    const cab = `<div class="card"><div class="row">
+      <label>${cli ? "Cliente" : "Proveedor"}<br><input data-pe="tercero" list="dlter" size="12" value="${esc(t ? t.codigo : "")}"></label><span style="min-width:14rem">${esc(t ? t.nombre : "")}</span>
+      <label>Fecha del pedido<br><input type="date" data-pe="fecha" value="${p.fecha || ""}"></label>
+      <label>${cli ? "Fecha de entrega" : "Fecha de recepción"}<br><input type="date" data-pe="fecha_entrega" value="${p.fecha_entrega || ""}"></label>
+      <label>Almacén<br><select data-pe="almacen_id">${optsHtml(S.d.almacenes.map(a => [a.id, a.codigo + " · " + a.nombre]), p.almacen_id)}</select></label>
+      <label>Estado<br><b>${est}</b></label>
+      ${guardado ? `<label>${cli ? "Fecha de la entrega" : "Fecha de la recepción"}<br><input type="date" data-pe="fechaMov" value="${S.ped.fechaMov || hoy()}"></label>` : ""}</div></div>
+      <datalist id="dlter">${S.d.terceros.filter(x => x.tipo === (cli ? "C" : "P")).map(x => `<option value="${esc(x.codigo)}">${esc(x.nombre)}</option>`).join("")}</datalist>
+      <datalist id="dlart">${S.d.articulos.filter(a => a.activo !== false).map(a => `<option value="${esc(a.codigo)}">${esc(a.nombre)}</option>`).join("")}</datalist>`;
+    const filas = ls.map((l, i) => { const a = artPorId(l.articulo_id), rec = recibidoL(l), pend = Math.max(0, r3((+l.cantidad || 0) - rec)), svc = esServ(l);
+      return `<tr><td>${i + 1}</td><td><input data-pl="${i}" data-k="art" list="dlart" size="9" value="${esc(a ? a.codigo : "")}"></td><td><input data-pl="${i}" data-k="descripcion" size="28" value="${esc(l.descripcion || "")}"></td>
+       <td><select data-pl="${i}" data-k="almacen_id">${optsHtml(S.d.almacenes.map(x => [x.id, x.codigo]), l.almacen_id)}</select></td>
+       <td><input class="n" data-pl="${i}" data-k="cantidad" size="7" value="${l.cantidad}"></td><td>${esc(l.unidad || (a ? a.unidad : "") || "")}</td><td><input class="n" data-pl="${i}" data-k="precio" size="9" value="${l.precio}"></td><td><input class="n" data-pl="${i}" data-k="dto_pct" size="4" value="${l.dto_pct || 0}"></td>
+       <td><select data-pl="${i}" data-k="cod_iva">${optsHtml(codsLinea(p.tipo).map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]), l.cod_iva)}</select></td>
+       ${cli ? `<td><select data-pl="${i}" data-k="cod_rec">${optsHtml(codsRec().filter(c => c.cod === recDeCodigo(l.cod_iva)).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), l.cod_rec)}</select></td>` : ""}
+       <td class="n" data-pimp="${i}">${eur(importeL(p, l))}</td><td class="n">${guardado && !svc ? q3(rec) : ""}</td><td class="n">${guardado ? q3(facturadoL(l)) : ""}</td>
+       <td>${guardado && !svc ? `<input class="n" data-pl="${i}" data-k="ahora" size="6" value="${l.ahora === undefined ? q3(pend) : l.ahora}">` : ""}</td><td><button class="d" data-a="dellineaped" data-i="${i}">✕</button></td></tr>`; }).join("");
+    cuerpo = `${cab}<div class="pagina"><div class="lista"><table class="editable"><tr><th>Línea</th><th>Artículo</th><th>Descripción</th><th>Almacén</th><th class="n">Cantidad</th><th>Unidad</th><th class="n">Precio unitario</th><th class="n">% descuento</th><th>Código de impuestos</th>${cli ? "<th>Recargo</th>" : ""}<th class="n">Importe neto</th><th class="n">${cli ? "Entregado" : "Recibido"}</th><th class="n">Facturado</th><th class="n">${cli ? "Entregar ahora" : "Recibir ahora"}</th><th></th></tr>${filas}</table>
+      <div class="row" style="margin-top:.5rem"><button data-a="addlineaped">+ Línea</button></div><div class="pie" id="piePed">${piePed(p, ls)}</div></div>
+      <aside class="factbox"><h3>${cli ? "Cliente" : "Proveedor"}</h3>${t ? `<dl><dt>Cuenta</dt><dd>${esc(t.codigo)}</dd><dt>NIF</dt><dd>${esc(t.cif || "")}</dd><dt>Saldo</dt><dd>${eur(saldoTer(t))}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione ${cli ? "un cliente" : "un proveedor"}.</p>`}
+      <h3 style="margin-top:1rem">Facturas</h3>${fx.length ? `<dl>${fx.map(f => `<dt><a data-a="factdeped" data-id="${f.id}" data-t="${f.tipo}">${esc(f.numero)}</a></dt><dd>${estadoF(f)}</dd>`).join("")}</dl>` : `<p style="color:var(--tx2)">Sin facturas.</p>`}</aside></div>`;
+  }
+  return pagina(cli ? "Pedido de ventas" : "Pedido de compra", acc, cuerpo, { tabs: ["Líneas", "Encabezado"], tabKey: "ped", vista: `${p.numero}${t ? " · " + t.nombre : ""}` });
+}
+const importeL = (p, l) => r2((+l.cantidad || 0) * netoPed(p, l));
+const piePed = (p, ls) => { const tot = totalesPed(p, ls); return `<span>Base imponible <b>${eur(tot.base)}</b></span><span>IVA <b>${eur(tot.cuota)}</b></span>${tot.cuotaA ? `<span>IVA autorrepercutido <b>${eur(tot.cuotaA)}</b></span>` : ""}${tot.rec ? `<span>Recargo <b>${eur(tot.rec)}</b></span>` : ""}<span>Total <b>${eur(tot.total)}</b></span>`; };
+function refrescaPed() {
+  const { p, ls } = S.ped, e = document.getElementById("piePed"); if (e) e.innerHTML = piePed(p, ls);
+  document.querySelectorAll("[data-pimp]").forEach(td => { const l = ls[+td.dataset.pimp]; td.textContent = l ? eur(importeL(p, l)) : ""; });
+}
+async function guardarPed(silencioso) {
+  const { p, ls } = S.ped, t = terPorId(p.tercero_id), fila = x => (x === "" || x === undefined) ? null : x;
+  if (!t) { alert("Falta " + (p.tipo === "V" ? "el cliente." : "el proveedor.")); return false; }
+  const val = ls.filter(l => l.articulo_id || (l.descripcion || "").trim());
+  if (!val.length) { alert("El pedido no tiene líneas."); return false; }
+  const pdb = { id: p.id, empresa_id: S.emp.id, tipo: p.tipo, numero: p.numero, tercero_id: p.tercero_id, fecha: fila(p.fecha), fecha_entrega: fila(p.fecha_entrega), almacen_id: p.almacen_id || null, estado: p.estado || "abierto", dto_pct: +num(p.dto_pct) || 0, ficha: p.ficha || {} };
+  const ldb = val.map((l, i) => ({ id: l.id, pedido_id: p.id, empresa_id: S.emp.id, orden: i, articulo_id: l.articulo_id || null, descripcion: l.descripcion || null, almacen_id: l.almacen_id || null, cantidad: +l.cantidad || 0, unidad: l.unidad || null, precio: +l.precio || 0, dto_pct: +l.dto_pct || 0, cod_iva: l.cod_iva || null, cod_rec: l.cod_rec || null }));
+  await db.guardarPedido(pdb, ldb);
+  S.d = await db.cargar(S.emp.id); S.ped.ls = S.ped.ls.filter(l => val.includes(l)); if (!silencioso) render(); return true;
+}
+async function registrarMovPed() {
+  const cli = S.ped.p.tipo === "V";
+  if (!(await guardarPed(true))) return;
+  const { p, ls } = S.ped, fecha = S.ped.fechaMov || hoy(), n = docsMov(p).length + 1, doc = (cli ? "ENT" : "REC") + "-" + p.numero + "-" + n, ms = [], acum = new Map();
+  for (const l of ls) {
+    const a = artPorId(l.articulo_id); if (!a || a.tipo === "Servicio") continue;
+    const pend = r3((+l.cantidad || 0) - recibidoL(l)), q = r3(l.ahora === undefined ? pend : (+l.ahora || 0)); if (q <= 0) continue;
+    const alm = l.almacen_id || p.almacen_id; if (!alm) return alert("Falta el almacén en la línea de " + a.codigo + ".");
+    if (q > pend && !confirm("Se " + (cli ? "entregan " : "reciben ") + q3(q) + " de " + a.codigo + " y solo hay " + q3(pend) + " pendientes. ¿Continuar?")) return;
+    if (cli) { const k = a.id + "|" + alm, ya = acum.get(k) || 0; if (stockArt(a.id, alm) - ya - q < 0 && !confirm("Las existencias de " + a.codigo + " en " + almNombre(alm) + " quedarán en negativo. ¿Continuar?")) return; acum.set(k, ya + q); }
+    ms.push({ id: uid(), empresa_id: S.emp.id, fecha, articulo_id: a.id, almacen_id: alm, tipo: cli ? "Entrega" : "Recepción", cantidad: cli ? -q : q, coste: Math.round((cli ? costeMedio(a) : netoPed(p, l)) * 10000) / 10000, pedido_id: p.id, linea_id: l.id, documento: doc, notas: null, creado: new Date().toISOString() });
+  }
+  if (!ms.length) return alert(cli ? "No hay nada que entregar." : "No hay nada que recibir.");
+  await db.guardarMovs(ms); S.d = await db.cargar(S.emp.id); S.ped.ls.forEach(l => { l.ahora = undefined; }); render();
+}
+async function deshacerMovPed() {
+  const { p } = S.ped, docs = docsMov(p), ult = docs[docs.length - 1]; if (!ult) return;
+  const ms = S.d.movinv.filter(m => m.pedido_id === p.id && m.documento === ult);
+  for (const l of S.ped.ls) { const q = ms.filter(m => m.linea_id === l.id).reduce((s, m) => s + Math.abs(+m.cantidad), 0); if (q && r3(recibidoL(l) - q) < facturadoL(l)) return alert("La línea de " + (l.descripcion || "") + " ya está facturada por una cantidad mayor. Elimine antes la factura."); }
+  if (!confirm("¿Deshacer " + ult + "? Se eliminarán sus " + ms.length + " movimientos de inventario.")) return;
+  await db.borrarMovs(ms.map(m => m.id)); S.d = await db.cargar(S.emp.id); render();
+}
+async function facturarPed() {
+  if (!(await guardarPed(true))) return;
+  const { p, ls } = S.ped, cli = p.tipo === "V", t = terPorId(p.tercero_id), fl = [];
+  for (const l of ls) {
+    const q = r3((esServ(l) ? (+l.cantidad || 0) : recibidoL(l)) - facturadoL(l)); if (q <= 0) continue;
+    const a = artPorId(l.articulo_id), c = CODIGO[l.cod_iva];
+    fl.push({ id: null, descripcion: l.descripcion || (a ? a.nombre : ""), cuenta: (a && (cli ? a.cuenta_venta : a.cuenta_compra)) || primeraCuenta(cli ? "700" : "600"), cantidad: q, precio: Math.round(netoPed(p, l) * 10000) / 10000, iva: c ? c.pct : 0, cod: l.cod_iva || "", rec: l.cod_rec || "", auto: !!c && (c.tipo === "ue" || c.tipo === "isp"), pedido_linea_id: l.id, tocado: true });
+  }
+  if (!fl.length) return alert(cli ? "No hay nada pendiente de facturar. Registre antes la entrega." : "No hay nada pendiente de facturar. Registre antes la recepción.");
+  const pg = (t && t.ficha && t.ficha.pago) || {}, cond = p.ficha.cond ? { ficha: { pago: { cond: p.ficha.cond, dia: pg.dia } } } : t;
+  const f = { id: uid(), empresa_id: S.emp.id, tipo: p.tipo, numero: siguienteFact(p.tipo), tercero_id: p.tercero_id, num_externo: "", fecha_emision: hoy(), fecha_registro: hoy(), fecha_iva: hoy(), fecha_vencimiento: calcVenc(cond, hoy()), vencAuto: true, estado: "abierto", asiento_id: null, notas: "Pedido " + p.numero, retencion_tipo: "", retencion_pct: 0, pedido_id: p.id };
+  const rc = p.ficha.cod_ret || (t && t.ficha && t.ficha.cod_ret); if (rc) aplicarRet(f, rc);
+  S.fact = { f, ls: fl }; await guardarFactura();
+  S.ped = null; S.vista = cli ? "fventa" : "fcompra"; S.selFact = f.id; await recargar();
+}
+function aplicarTerceroPed(x) { // al elegir proveedor/cliente: condiciones de pago, retención y códigos de impuestos de sus líneas
+  const { p, ls } = S.ped, fi = (x && x.ficha) || {};
+  p.tercero_id = x ? x.id : null;
+  if (x) { p.ficha.cond = (fi.pago || {}).cond || p.ficha.cond; p.ficha.forma = (fi.pago || {}).forma || p.ficha.forma; if (fi.cod_ret) p.ficha.cod_ret = fi.cod_ret; }
+  ls.forEach(l => { if (!l.tocado) { l.cod_iva = codDefecto(x, p.tipo); l.cod_rec = p.tipo === "V" && aplicaRec(x) ? recDeCodigo(l.cod_iva) : ""; } });
+}
+function cambioInv(t) { // cambios en formularios del inventario y los pedidos; devuelve true si lo ha tratado
+  const d = t.dataset; if (!d) return false;
+  if (d.ae !== undefined) { setPath(S.artEdit, d.ae, t.type === "checkbox" ? t.checked : t.value); if (d.ae === "tipo") render(); return true; }
+  if (d.ak !== undefined) { S.almEdit[d.ak] = t.value; return true; }
+  if (d.aj !== undefined) { S.ajuste[d.aj] = t.value; if (d.aj === "tipo") render(); return true; }
+  if (t.id === "fal") { S.filtroAlm = t.value; render(); return true; }
+  if (d.pe !== undefined) {
+    const { p } = S.ped, k = d.pe;
+    if (k === "tercero") {
+      const x = t.value.trim() ? terPorCod(t.value) : null, tp = p.tipo === "V" ? "C" : "P";
+      if (t.value.trim() && (!x || x.tipo !== tp)) { alert("No existe esa cuenta de " + (tp === "C" ? "cliente." : "proveedor.")); aplicarTerceroPed(null); } else aplicarTerceroPed(x);
+      render();
+    } else if (k === "fechaMov") S.ped.fechaMov = t.value;
+    else if (k === "almacen_id") { const ant = p.almacen_id; p.almacen_id = t.value; S.ped.ls.forEach(l => { if (!l.almacen_id || l.almacen_id === ant) l.almacen_id = t.value; }); render(); }
+    else { setPath(p, k, t.type === "checkbox" ? t.checked : (k === "dto_pct" ? (+num(t.value) || 0) : t.value)); if (k === "dto_pct") refrescaPed(); }
+    return true;
+  }
+  if (d.pl !== undefined) {
+    const { p } = S.ped, l = S.ped.ls[+d.pl], k = d.k, t0 = terPorId(p.tercero_id);
+    if (k === "art") {
+      const a = t.value.trim() ? artPorCod(t.value) : null;
+      if (t.value.trim() && !a) { alert("No existe ese artículo."); l.articulo_id = null; }
+      else if (a) { l.articulo_id = a.id; l.descripcion = a.nombre; l.unidad = a.unidad || ""; l.precio = +(p.tipo === "V" ? a.precio_venta : a.precio_compra) || 0; const cod = (p.tipo === "V" ? a.cod_iva_v : a.cod_iva_c) || codDefecto(t0, p.tipo); l.cod_iva = cod; l.cod_rec = p.tipo === "V" && aplicaRec(t0) ? recDeCodigo(cod) : ""; l.tocado = true; }
+      else l.articulo_id = null;
+      render();
+    } else if (k === "cod_iva") { l.cod_iva = t.value; l.tocado = true; if (l.cod_rec || (p.tipo === "V" && aplicaRec(t0))) l.cod_rec = recDeCodigo(t.value); render(); }
+    else if (k === "cantidad" || k === "precio" || k === "dto_pct" || k === "ahora") { l[k] = +num(t.value) || 0; refrescaPed(); }
+    else l[k] = t.value;
+    return true;
+  }
+  return false;
+}
+async function accionInv(a, b) { // clics del inventario y los pedidos; devuelve true si lo ha tratado
+  const id = b.dataset.id;
+  switch (a) {
+    case "selart": S.selArt = id; render(); return true;
+    case "nuevoart": S.artEdit = artNuevo(); render(); return true;
+    case "editart": { const x = artPorId(id || S.selArt); if (x) { S.artEdit = JSON.parse(JSON.stringify(x)); S.artEdit.ficha = S.artEdit.ficha || {}; S.artEdit.bloq = x.activo === false; S.selArt = x.id; render(); } return true; }
+    case "cancelart": S.artEdit = null; render(); return true;
+    case "guardarart": await guardarArt(); return true;
+    case "delart": {
+      const x = artPorId(S.selArt); if (!x) return true;
+      if (S.d.movinv.some(m => m.articulo_id === x.id) || S.d.plineas.some(l => l.articulo_id === x.id)) { alert("El artículo tiene movimientos o pedidos y no se puede eliminar. Puede bloquearlo."); return true; }
+      if (confirm("¿Eliminar " + x.codigo + " " + x.nombre + "?")) { await db.borrarArticulo(x.id); S.selArt = null; await recargar(); }
+      return true;
+    }
+    case "verexist": { S.vista = "existencias"; S.filtroAlm = ""; render(); return true; }
+    case "verestado": S.vista = "movinv"; render(); return true;
+    case "nuevoalm": S.almEdit = { id: uid(), codigo: siguienteCod(S.d.almacenes, "ALM", 2), nombre: "", direccion: "" }; render(); return true;
+    case "editalm": { const x = almPorId(id); if (x) { S.almEdit = { ...x }; render(); } return true; }
+    case "cancelaralm": S.almEdit = null; render(); return true;
+    case "guardaralm": {
+      const e = S.almEdit, x = { id: e.id, empresa_id: S.emp.id, codigo: (e.codigo || "").trim(), nombre: (e.nombre || "").trim(), direccion: (e.direccion || "").trim() || null };
+      if (!x.codigo || !x.nombre) { alert("Faltan el código y el nombre."); return true; }
+      if (S.d.almacenes.some(y => y.id !== x.id && y.codigo.toLowerCase() === x.codigo.toLowerCase())) { alert("Ya existe ese almacén."); return true; }
+      await db.guardarAlmacen(x); S.almEdit = null; await recargar(); return true;
+    }
+    case "delalm": {
+      const x = S.almEdit && almPorId(S.almEdit.id); if (!x) return true;
+      if (S.d.movinv.some(m => m.almacen_id === x.id) || S.d.pedidos.some(p => p.almacen_id === x.id)) { alert("El almacén tiene movimientos o pedidos y no se puede eliminar."); return true; }
+      if (confirm("¿Eliminar el almacén " + x.nombre + "?")) { await db.borrarAlmacen(x.id); S.almEdit = null; await recargar(); }
+      return true;
+    }
+    case "nuevoaj": { const al = await asegurarAlmacen(); S.ajuste = { tipo: "Ajuste", art: "", alm: S.filtroAlm || al.id, alm2: "", cant: "", coste: "", fecha: hoy(), notas: "" }; render(); return true; }
+    case "cancelaraj": S.ajuste = null; render(); return true;
+    case "guardaraj": await guardarAjuste(); return true;
+    case "selmov": S.selMov = id; render(); return true;
+    case "eliminarmov": {
+      const m = S.d.movinv.find(x => x.id === S.selMov); if (!m || m.pedido_id) return true;
+      const ids = S.d.movinv.filter(x => x.documento === m.documento && !x.pedido_id).map(x => x.id);
+      if (confirm("¿Eliminar " + m.documento + " (" + ids.length + " movimiento" + (ids.length > 1 ? "s" : "") + ")?")) { await db.borrarMovs(ids); S.selMov = null; await recargar(); }
+      return true;
+    }
+    case "selped": S.selPed = id; render(); return true;
+    case "nuevoped": {
+      const tp = b.dataset.t, al = await asegurarAlmacen(), p = { id: uid(), empresa_id: S.emp.id, tipo: tp, numero: siguientePed(tp), tercero_id: null, fecha: hoy(), fecha_entrega: "", almacen_id: al.id, estado: "abierto", dto_pct: 0, ficha: fichaPedBase() };
+      S.ped = { p, ls: [nuevaLineaPed(p)], fechaMov: hoy() }; S.tabs.ped = "Líneas"; render(); return true;
+    }
+    case "abrirped": abrirPedido(id || S.selPed); return true;
+    case "volverped": S.ped = null; await recargar(); return true;
+    case "guardarped": await guardarPed(); return true;
+    case "addlineaped": S.ped.ls.push(nuevaLineaPed(S.ped.p)); render(); return true;
+    case "dellineaped": {
+      const l = S.ped.ls[+b.dataset.i]; if (l && (recibidoL(l) > 0 || facturadoL(l) > 0)) { alert("La línea tiene " + (S.ped.p.tipo === "V" ? "entregas" : "recepciones") + " o facturas y no se puede quitar."); return true; }
+      S.ped.ls.splice(+b.dataset.i, 1); if (!S.ped.ls.length) S.ped.ls.push(nuevaLineaPed(S.ped.p)); render(); return true;
+    }
+    case "recibirped": await registrarMovPed(); return true;
+    case "deshacerrec": await deshacerMovPed(); return true;
+    case "facturarped": await facturarPed(); return true;
+    case "cancelarped": {
+      const { p, ls } = S.ped;
+      if (p.estado !== "cancelado" && ls.some(l => recibidoL(l) > 0 || facturadoL(l) > 0)) { alert("El pedido ya tiene movimientos o facturas y no se puede cancelar."); return true; }
+      p.estado = p.estado === "cancelado" ? "abierto" : "cancelado"; await guardarPed(); return true;
+    }
+    case "delped": {
+      const p = S.d.pedidos.find(x => x.id === S.selPed); if (!p) return true;
+      if (S.d.movinv.some(m => m.pedido_id === p.id) || S.d.facturas.some(f => f.pedido_id === p.id)) { alert("El pedido tiene movimientos de inventario o facturas y no se puede eliminar."); return true; }
+      if (confirm("¿Eliminar el pedido " + p.numero + "?")) { await db.borrarPedido(p.id); S.selPed = null; await recargar(); }
+      return true;
+    }
+    case "factdeped": S.ped = null; S.vista = b.dataset.t === "V" ? "fventa" : "fcompra"; abrirFactura(id); return true;
+  }
+  return false;
+}
+
 /* ---------------- Render y eventos ---------------- */
 function render() {
   if (!S.empresas.length && !S.emp) return renderEmpresaNueva();
@@ -1065,7 +1451,7 @@ function render() {
    <span class="ej">Ejercicio <select id="ej">${years.map(y => `<option ${y === S.ej ? "selected" : ""}>${y}</option>`).join("")}</select></span>
    ${sb ? `<button data-a="salir">Salir</button>` : ""}<span class="av">PO</span></div>
    <div class="fo-body"><div class="fo-rail"><button data-a="nav" title="Menú">☰</button><button data-a="vista" data-v="inicio" title="Inicio">⌂</button></div>
-   <div class="fo-page ${(S.terEdit || S.fact || S.libro || S.edit || S.vista === "inicio") ? "form" : ""}">${LOCAL ? `<p class="aviso">Modo local de pruebas: los datos están solo en este navegador.</p>` : ""}${V[S.vista]()}</div></div>${S.nav ? navHtml() : ""}`;
+   <div class="fo-page ${(S.terEdit || S.fact || S.ped || S.artEdit || S.libro || S.edit || S.vista === "inicio") ? "form" : ""}">${LOCAL ? `<p class="aviso">Modo local de pruebas: los datos están solo en este navegador.</p>` : ""}${V[S.vista]()}</div></div>${S.nav ? navHtml() : ""}`;
 }
 const leerFormEmp = () => {
   const f = S.formEmp || (S.formEmp = { nombre: "", cif: "", alm: LOCAL ? "local" : "nube", handle: null }), n = document.getElementById("en");
@@ -1112,6 +1498,7 @@ document.addEventListener("focusin", e => { // al entrar en una línea del diari
 document.addEventListener("change", async e => {
   const t = e.target;
   try {
+    if (cambioInv(t)) return;
     if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
     else if (t.dataset.tf !== undefined) {
       setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.value);
@@ -1214,7 +1601,8 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
   const a = b.dataset.a;
   try {
-    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
+    if (await accionInv(a, b)) return;
+    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; S.ped = null; S.artEdit = null; S.almEdit = null; S.ajuste = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
     else if (a === "nav") { S.nav = !S.nav; if (S.nav) S.navMod = moduloDe(S.vista) || S.navMod; render(); }
     else if (a === "navmod") { S.navMod = b.dataset.id; render(); }
     else if (a === "navsec") { S.navCerr[b.dataset.id] = !S.navCerr[b.dataset.id]; render(); }
