@@ -28,12 +28,13 @@ const PGC = [
 let sb = null, db;
 if (LOCAL) {
   const K = "contab-local-v2";
-  const g = () => { const d = JSON.parse(localStorage.getItem(K) || "{}"); for (const k of ["empresas", "cuentas", "asientos", "apuntes", "lineas", "terceros", "facturas", "flineas", "libros", "liquidaciones"]) d[k] ||= []; return d; };
+  const g = () => { const d = JSON.parse(localStorage.getItem(K) || "{}"); for (const k of ["empresas", "cuentas", "asientos", "apuntes", "lineas", "terceros", "facturas", "flineas", "libros", "liquidaciones", "manual"]) d[k] ||= []; return d; };
   const s = d => localStorage.setItem(K, JSON.stringify(d));
   db = {
     async empresas() { return g().empresas; },
     async crearEmpresa(nombre, cif) { const d = g(); const e = { id: uid(), nombre, cif }; d.empresas.push(e); s(d); return e; },
-    async cargar(eid) { const d = g(), f = x => x.empresa_id === eid; return { cuentas: d.cuentas.filter(f), asientos: d.asientos.filter(f), apuntes: d.apuntes.filter(f), lineas: d.lineas.filter(f), terceros: d.terceros.filter(f), facturas: d.facturas.filter(f), flineas: d.flineas.filter(f), libros: d.libros.filter(f), liquidaciones: d.liquidaciones.filter(f) }; },
+    async cargar(eid) { const d = g(), f = x => x.empresa_id === eid; return { cuentas: d.cuentas.filter(f), asientos: d.asientos.filter(f), apuntes: d.apuntes.filter(f), lineas: d.lineas.filter(f), terceros: d.terceros.filter(f), facturas: d.facturas.filter(f), flineas: d.flineas.filter(f), libros: d.libros.filter(f), liquidaciones: d.liquidaciones.filter(f), manual: d.manual.filter(f) }; },
+    async guardarManual(m) { const d = g(); d.manual = d.manual.filter(x => !(x.empresa_id === m.empresa_id && x.modelo === m.modelo && x.ejercicio === m.ejercicio && x.periodo === m.periodo)); d.manual.push(m); s(d); },
     async guardarLiquidacion(l) { const d = g(); d.liquidaciones.push(l); s(d); },
     async borrarLiquidacion(id) { const d = g(); d.liquidaciones = d.liquidaciones.filter(l => l.id !== id); s(d); },
     async guardarLibro(l) { const d = g(); const i = d.libros.findIndex(x => x.id === l.id); if (i < 0) d.libros.push(l); else d.libros[i] = l; s(d); },
@@ -70,7 +71,8 @@ if (LOCAL) {
   db = {
     async empresas() { return ok(await sb.from("empresas").select("*").order("nombre")); },
     async crearEmpresa(nombre, cif) { return ok(await sb.from("empresas").insert({ nombre, cif }).select().single()); },
-    async cargar(eid) { const [cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones] = await Promise.all(["cuentas", "asientos", "apuntes", "diario_lineas", "terceros", "facturas", "factura_lineas", "diario_libros", "liquidaciones"].map(t => todo(t, eid))); return { cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones }; },
+    async cargar(eid) { const [cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones, manual] = await Promise.all(["cuentas", "asientos", "apuntes", "diario_lineas", "terceros", "facturas", "factura_lineas", "diario_libros", "liquidaciones", "modelos_manual"].map(t => todo(t, eid))); return { cuentas, asientos, apuntes, lineas, terceros, facturas, flineas, libros, liquidaciones, manual }; },
+    async guardarManual(m) { ok(await sb.from("modelos_manual").upsert(m, { onConflict: "empresa_id,modelo,ejercicio,periodo" })); },
     async guardarLiquidacion(l) { ok(await sb.from("liquidaciones").insert(l)); },
     async borrarLiquidacion(id) { ok(await sb.from("liquidaciones").delete().eq("id", id)); },
     async guardarLibro(l) { ok(await sb.from("diario_libros").upsert(l)); },
@@ -92,7 +94,7 @@ if (LOCAL) {
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [] }, pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -151,10 +153,10 @@ const NAV = [
   ["Libro mayor", [["cuentas", "Cuentas principales"], ["diario", "Diarios generales"], ["mayor", "Transacciones del libro mayor"], ["sumas", "Balance de comprobación"], ["estados", "Estados financieros"]]],
   ["Cuentas a cobrar", [["clientes", "Todos los clientes"], ["fventa", "Facturas de cliente"], ["cobros", "Cobros pendientes"]]],
   ["Cuentas a pagar", [["proveedores", "Todos los proveedores"], ["fcompra", "Facturas de proveedor"], ["pagos", "Pagos pendientes"]]],
-  ["Impuestos", [["libroiva", "Libros de IVA"], ["m303", "Modelo 303"], ["m347", "Modelo 347"]]]
+  ["Impuestos", [["libroiva", "Libros de IVA"], ["m303", "Modelo 303"], ["m390", "Modelo 390"], ["m349", "Modelo 349"], ["m347", "Modelo 347"], ["m111", "Modelo 111"], ["m115", "Modelo 115"], ["m123", "Modelo 123"]]]
 ];
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", libroiva: "Libros de IVA", m303: "Modelo 303", m347: "Modelo 347" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -345,6 +347,8 @@ function vistaFacturaEdit() {
    <label>Fecha de factura<br><input type="date" data-f="fecha_emision" ${dis} value="${f.fecha_emision || ""}"></label>
    <label>Fecha de registro<br><input type="date" data-f="fecha_registro" ${dis} value="${f.fecha_registro || ""}"></label>
    <label>Vencimiento<br><input type="date" data-f="fecha_vencimiento" ${dis} value="${f.fecha_vencimiento || ""}"></label>
+   ${cli ? "" : `<label>Retención IRPF<br><select data-f="retencion_tipo" ${dis}><option value="">Ninguna</option><option value="111" ${f.retencion_tipo === "111" ? "selected" : ""}>Profesionales (111)</option><option value="115" ${f.retencion_tipo === "115" ? "selected" : ""}>Alquileres (115)</option><option value="123" ${f.retencion_tipo === "123" ? "selected" : ""}>Capital mobiliario (123)</option></select></label>
+   <label>% ret.<br><input data-f="retencion_pct" size="5" ${dis || (f.retencion_tipo ? "" : "disabled")} value="${f.retencion_pct || 0}"></label>`}
    <label>Estado<br><b>${estadoF(f)}</b></label></div></div>
   <datalist id="dlter">${S.d.terceros.filter(x => x.tipo === (cli ? "C" : "P")).map(x => `<option value="${esc(x.codigo)}">${esc(x.nombre)}</option>`).join("")}</datalist>
   <datalist id="dl">${S.d.cuentas.map(c => `<option value="${esc(c.codigo)}">${esc(c.nombre)}</option>`).join("")}</datalist>`;
@@ -355,15 +359,16 @@ function vistaFacturaEdit() {
   return pagina(cli ? "Factura de cliente" : "Factura de proveedor", acc, `${cab}
   <div class="pagina"><div class="lista"><table class="editable"><tr><th>Descripción</th><th>${cli ? "Cuenta de ingresos" : "Cuenta de gastos"}</th><th class="n">Cantidad</th><th class="n">Precio unitario</th><th>IVA</th><th class="n">Importe</th><th></th></tr>${filas}</table>
    ${reg ? "" : `<div class="row" style="margin-top:.5rem"><button data-a="addlineaf">+ Línea</button></div>`}
-   <div class="pie" id="pieF"><span>Base imponible <b id="tb">${eur(tot.base)}</b></span><span>IVA <b id="ti">${eur(tot.cuota)}</b></span><span>Total <b id="tt">${eur(tot.total)}</b></span>${reg ? `<span>${cli ? "Cobrado" : "Pagado"} <b>${eur(pagadoF(f))}</b></span><span>Pendiente <b>${eur(pendienteF(f))}</b></span>` : ""}</div></div>
+   <div class="pie" id="pieF"><span>Base imponible <b id="tb">${eur(tot.base)}</b></span><span>IVA <b id="ti">${eur(tot.cuota)}</b></span><span>Total <b id="tt">${eur(tot.total)}</b></span>${cli ? "" : `<span>Retención <b id="tr">${eur(retDe(f, tot.base))}</b></span><span>A pagar <b id="ta">${eur(r2(tot.total - retDe(f, tot.base)))}</b></span>`}${reg ? `<span>${cli ? "Cobrado" : "Pagado"} <b>${eur(pagadoF(f))}</b></span><span>Pendiente <b>${eur(pendienteF(f))}</b></span>` : ""}</div></div>
   <aside class="factbox"><h3>${cli ? "Cliente" : "Proveedor"}</h3>${t ? `<dl><dt>Cuenta</dt><dd>${esc(t.codigo)}</dd><dt>NIF</dt><dd>${esc(t.cif || "")}</dd><dt>Grupo de impuestos</dt><dd>${esc(t.grupo_iva)}</dd><dt>Saldo</dt><dd>${eur(saldoTer(t))}</dd></dl>` : `<p style="color:var(--tx2)">Seleccione ${cli ? "un cliente" : "un proveedor"}.</p>`}
    <h3 style="margin-top:1rem">Factura</h3><dl><dt>Número</dt><dd>${esc(f.numero)}</dd></dl></aside></div>`, { tabs: ["Líneas", "General"], vista: `${f.numero}${t ? " · " + t.nombre : ""}` });
 }
 V.fventa = () => S.fact && S.fact.f.tipo === "V" ? vistaFacturaEdit() : vistaFacturas("V");
 V.fcompra = () => S.fact && S.fact.f.tipo === "C" ? vistaFacturaEdit() : vistaFacturas("C");
 function refrescaF() {
-  const { ls } = S.fact, tot = totalesF(ls);
+  const { f, ls } = S.fact, tot = totalesF(ls);
   document.getElementById("tb").textContent = eur(tot.base); document.getElementById("ti").textContent = eur(tot.cuota); document.getElementById("tt").textContent = eur(tot.total);
+  if (document.getElementById("tr")) { const r = retDe(f, tot.base); document.getElementById("tr").textContent = eur(r); document.getElementById("ta").textContent = eur(r2(tot.total - r)); }
   document.querySelectorAll("[data-imp]").forEach(td => { const l = ls[+td.dataset.imp]; td.textContent = l ? eur((+l.cantidad || 0) * (+l.precio || 0)) : ""; });
 }
 const ivaDefecto = t => (t && t.grupo_iva !== "NAC") ? 0 : 21;
@@ -371,7 +376,7 @@ function nuevaLineaF(f) { return { id: null, descripcion: "", cuenta: f.tipo ===
 function abrirFactura(id) { const f = S.d.facturas.find(x => x.id === id); if (!f) return; S.fact = { f: { ...f }, ls: lineasF(f).map(l => ({ ...l })) }; S.selFact = id; if (!S.fact.ls.length) S.fact.ls.push(nuevaLineaF(S.fact.f)); render(); }
 async function guardarFactura() {
   const { f, ls } = S.fact; const fila = x => (x === "" || x === undefined) ? null : x;
-  const fdb = { id: f.id, empresa_id: S.emp.id, tipo: f.tipo, numero: f.numero, tercero_id: f.tercero_id || null, num_externo: fila(f.num_externo), fecha_emision: fila(f.fecha_emision), fecha_registro: fila(f.fecha_registro), fecha_iva: fila(f.fecha_iva || f.fecha_registro), fecha_vencimiento: fila(f.fecha_vencimiento), estado: f.estado, asiento_id: f.asiento_id || null, notas: fila(f.notas) };
+  const fdb = { id: f.id, empresa_id: S.emp.id, tipo: f.tipo, numero: f.numero, tercero_id: f.tercero_id || null, num_externo: fila(f.num_externo), fecha_emision: fila(f.fecha_emision), fecha_registro: fila(f.fecha_registro), fecha_iva: fila(f.fecha_iva || f.fecha_registro), fecha_vencimiento: fila(f.fecha_vencimiento), estado: f.estado, asiento_id: f.asiento_id || null, notas: fila(f.notas), retencion_tipo: f.tipo === "C" ? fila(f.retencion_tipo) : null, retencion_pct: f.tipo === "C" && f.retencion_tipo ? (+f.retencion_pct || 0) : 0 };
   const ldb = ls.filter(l => (l.descripcion || l.cuenta) && (+l.precio || +l.cantidad)).map((l, i) => ({ id: l.id || uid(), factura_id: f.id, empresa_id: S.emp.id, orden: i, descripcion: l.descripcion || null, cuenta: l.cuenta || null, cantidad: +l.cantidad || 0, precio: +l.precio || 0, iva: +l.iva || 0 }));
   await db.guardarFactura(fdb, ldb);
   S.d = await db.cargar(S.emp.id); S.fact = { f: { ...S.d.facturas.find(x => x.id === f.id) }, ls: lineasF(f).map(l => ({ ...l })) };
@@ -388,13 +393,14 @@ async function registrarFactura() {
   validas.forEach((l, i) => { if (!S.d.cuentas.some(c => c.codigo === l.cuenta)) err.push("Línea " + (i + 1) + ": la cuenta " + (l.cuenta || "(vacía)") + " no existe."); });
   const ctrl = t ? (t.cuenta || (cli ? "430" : "400")) : "", ivaC = cli ? "477" : "472";
   [ctrl, ivaC].forEach(c => { if (t && !S.d.cuentas.some(x => x.codigo === c)) err.push("La cuenta " + c + " no existe en las cuentas principales."); });
+  if (!cli && retDe(f, totalesF(validas).base) > 0 && !S.d.cuentas.some(x => x.codigo === "4751")) err.push("La cuenta 4751 (H.P. acreedora por retenciones) no existe en las cuentas principales.");
   if (err.length) return alert("No se puede registrar:\n" + err.join("\n"));
   const tot = totalesF(validas);
   await guardarFactura();
   const ap = []; const add = (cuenta, imp, lado, extra = {}) => { imp = r2(imp); if (!imp) return; const otro = lado === "debe" ? "haber" : "debe"; const l = imp > 0 ? lado : otro; ap.push({ cuenta, concepto: null, debe: 0, haber: 0, ...extra, [l]: Math.abs(imp) }); };
   const porCta = new Map(); validas.forEach(l => porCta.set(l.cuenta, r2((porCta.get(l.cuenta) || 0) + r2(l.cantidad * l.precio))));
   if (cli) { add(ctrl, tot.total, "debe", { tercero_id: t.id }); porCta.forEach((b, c) => add(c, b, "haber")); add(ivaC, tot.cuota, "haber"); }
-  else { porCta.forEach((b, c) => add(c, b, "debe")); add(ivaC, tot.cuota, "debe"); add(ctrl, tot.total, "haber", { tercero_id: t.id }); }
+  else { const ret = retDe(S.fact.f, tot.base); porCta.forEach((b, c) => add(c, b, "debe")); add(ivaC, tot.cuota, "debe"); add(ctrl, r2(tot.total - ret), "haber", { tercero_id: t.id }); add("4751", ret, "haber"); }
   const concepto = (cli ? "Factura de venta " : "Factura de compra ") + (cli ? f.numero : (f.num_externo || f.numero)) + " " + t.nombre;
   const aid = await db.crearAsiento(S.emp.id, f.fecha_registro, concepto, ap, "factura", f.numero);
   S.fact.f.asiento_id = aid; S.fact.f.estado = "registrado"; await guardarFactura();
@@ -404,7 +410,10 @@ async function registrarFactura() {
 /* ---------------- Cobros y pagos pendientes (liquidación de facturas) ---------------- */
 const liqsF = f => S.d.liquidaciones.filter(l => l.factura_id === f.id).sort((a, b) => a.fecha.localeCompare(b.fecha));
 const pagadoF = f => r2(liqsF(f).reduce((a, l) => a + +l.importe, 0));
-const pendienteF = f => r2(totalesF(lineasF(f)).total - pagadoF(f));
+const retDe = (f, base) => (f.tipo === "C" && f.retencion_tipo) ? r2(base * (+f.retencion_pct || 0) / 100) : 0; // retención IRPF practicada al proveedor
+const retF = f => retDe(f, totalesF(lineasF(f)).base);
+const netoF = f => r2(totalesF(lineasF(f)).total - retF(f));
+const pendienteF = f => r2(netoF(f) - pagadoF(f));
 const sumPend = tipo => r2(S.d.facturas.filter(f => f.tipo === tipo && estadoF(f) === "Registrado").reduce((a, f) => a + pendienteF(f), 0));
 
 function vistaPendientes(tipo) {
@@ -414,7 +423,7 @@ function vistaPendientes(tipo) {
   const sel = L.find(f => f.id === S.selPend);
   const estado = f => pendienteF(f) <= 0 ? "Liquidada" : (f.fecha_vencimiento && f.fecha_vencimiento < hoyS ? "Vencida" : "Pendiente");
   const filas = L.map(f => { const t = terPorId(f.tercero_id) || {}, est = estado(f);
-    return `<tr data-sel class="${f.id === S.selPend ? "sel" : ""}" data-a="selpend" data-id="${f.id}"><td><a data-a="abrirfact" data-id="${f.id}">${esc(f.numero)}</a></td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td>${cli ? "" : `<td>${esc(f.num_externo || "")}</td>`}<td class="${est === "Vencida" ? "ko" : ""}">${f.fecha_vencimiento || ""}</td><td class="n">${eur(totalesF(lineasF(f)).total)}</td><td class="n">${sal(pagadoF(f))}</td><td class="n">${eur(pendienteF(f))}</td><td class="${est === "Vencida" ? "ko" : ""}">${est}</td></tr>`; }).join("");
+    return `<tr data-sel class="${f.id === S.selPend ? "sel" : ""}" data-a="selpend" data-id="${f.id}"><td><a data-a="abrirfact" data-id="${f.id}">${esc(f.numero)}</a></td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td>${cli ? "" : `<td>${esc(f.num_externo || "")}</td>`}<td class="${est === "Vencida" ? "ko" : ""}">${f.fecha_vencimiento || ""}</td><td class="n">${eur(netoF(f))}</td><td class="n">${sal(pagadoF(f))}</td><td class="n">${eur(pendienteF(f))}</td><td class="${est === "Vencida" ? "ko" : ""}">${est}</td></tr>`; }).join("");
   const totalPend = r2(L.reduce((a, f) => a + pendienteF(f), 0));
   const puede = sel && pendienteF(sel) > 0;
   const acc = btn("abrirpago", cli ? "Registrar cobro" : "Registrar pago", "", !puede) + btn("deshacerpago", "Deshacer último " + (cli ? "cobro" : "pago"), "", !sel || !liqsF(sel).length) + SEP + btn("abrirfact", "Abrir factura", `data-id="${sel ? sel.id : ""}"`, !sel);
@@ -496,8 +505,8 @@ V.libroiva = () => {
     { tabs: ["Libro registro"], vista: cli ? "IVA repercutido (facturas emitidas)" : "IVA soportado (facturas recibidas)", filtros: `<label>Libro<select id="tl"><option value="V" ${cli ? "selected" : ""}>Repercutido (ventas)</option><option value="C" ${cli ? "" : "selected"}>Soportado (compras)</option></select></label>${selPeriodo()}` });
 };
 
-function datos303() {
-  const V_ = facturasIva("V", S.periodo), C_ = facturasIva("C", S.periodo);
+function datos303(per = S.periodo) {
+  const V_ = facturasIva("V", per), C_ = facturasIva("C", per);
   const dev = { 0: 0, 4: [0, 0], 10: [0, 0], 21: [0, 0] }; let ex0 = 0;
   V_.forEach(f => { const d = desgloseF(f); ex0 = r2(ex0 + d[0].base); [4, 10, 21].forEach(k => { dev[k][0] = r2(dev[k][0] + d[k].base); dev[k][1] = r2(dev[k][1] + d[k].cuota); }); });
   let sBase = 0, sCuota = 0, c0 = 0;
@@ -536,8 +545,83 @@ V.m347 = () => {
   return pagina("Modelo 347", btn("exportar", "Exportar a Excel (CSV)", "", !(D.cli.length + D.pro.length)), `<div class="lista"><p class="aviso">Operaciones con terceros que superan 3.005,06 € en el año (IVA incluido, por fecha de IVA). Importes por trimestre. No incluye cobros en metálico ni operaciones de inmuebles, y no sustituye a la presentación en la AEAT.</p>
    ${tabla("Clientes", D.cli)}<div style="height:1.2rem"></div>${tabla("Proveedores", D.pro)}</div>`, { tabs: ["Declaración anual"], vista: "Ejercicio " + S.ej });
 };
+/* Modelo 390: resumen anual a partir de los cuatro trimestres */
+function datos390() {
+  const T = ["1T", "2T", "3T", "4T"].map(q => datos303(q));
+  const suma = f => r2(T.reduce((a, d) => a + f(d), 0));
+  const filas = [
+    ["Base 4 %", d => d.dev[4][0]], ["Cuota 4 %", d => d.dev[4][1]], ["Base 10 %", d => d.dev[10][0]], ["Cuota 10 %", d => d.dev[10][1]], ["Base 21 %", d => d.dev[21][0]], ["Cuota 21 %", d => d.dev[21][1]],
+    ["Total cuota devengada", d => d.totDev], ["Base deducible (operaciones interiores corrientes)", d => d.sBase], ["Cuota deducible", d => d.sCuota], ["Resultado (devengado − deducible)", d => d.resultado]];
+  const volumen = suma(d => d.dev[4][0] + d.dev[10][0] + d.dev[21][0] + d.ex0), compras = suma(d => d.sBase + d.c0);
+  return { T, filas: filas.map(([n, f]) => [n, ...T.map(f), suma(f)]), volumen, compras };
+}
+V.m390 = () => {
+  const D = datos390(), tot = new Set(["Total cuota devengada", "Resultado (devengado − deducible)"]);
+  return pagina("Modelo 390", btn("exportar", "Exportar a Excel (CSV)"), `<div class="lista"><p class="aviso">Resumen anual orientativo calculado con las facturas registradas de cada trimestre. No sustituye a la presentación en la AEAT ni incluye inversión del sujeto pasivo, intracomunitarias, importaciones, prorrata ni regularizaciones.</p>
+  <table><tr><th>Concepto</th><th class="n">1T</th><th class="n">2T</th><th class="n">3T</th><th class="n">4T</th><th class="n">Año ${S.ej}</th></tr>
+  ${D.filas.map(r => `<tr class="${tot.has(r[0]) ? "tot" : ""}"><td>${r[0]}</td>${r.slice(1).map(x => `<td class="n">${sal(x)}</td>`).join("")}</tr>`).join("")}</table>
+  <p style="color:var(--tx2)">Volumen de operaciones (ventas, base): ${eur(D.volumen)} € · Compras y gastos (base): ${eur(D.compras)} €</p></div>`, { tabs: ["Resumen anual"], vista: "Ejercicio " + S.ej });
+};
+
+/* Modelo 349: operaciones intracomunitarias (terceros con grupo de impuestos UE) */
+function datos349(per = S.periodo) {
+  const m = new Map();
+  [["V", "E"], ["C", "A"]].forEach(([tp, clave]) => facturasIva(tp, per).filter(f => (terPorId(f.tercero_id) || {}).grupo_iva === "UE").forEach(f => {
+    const k = clave + "|" + f.tercero_id, o = m.get(k) || { clave, t: terPorId(f.tercero_id) || {}, base: 0 }; o.base = r2(o.base + totalesF(lineasF(f)).base); m.set(k, o); }));
+  const filas = [...m.values()].sort((a, b) => a.clave.localeCompare(b.clave) || (a.t.nombre || "").localeCompare(b.t.nombre || ""));
+  return { filas, E: r2(filas.filter(o => o.clave === "E").reduce((a, o) => a + o.base, 0)), A: r2(filas.filter(o => o.clave === "A").reduce((a, o) => a + o.base, 0)) };
+}
+V.m349 = () => {
+  const D = datos349();
+  return pagina("Modelo 349", btn("exportar", "Exportar a Excel (CSV)", "", !D.filas.length), `<div class="lista"><p class="aviso">Operaciones con terceros marcados con grupo de impuestos UE: clientes = entregas (clave E) y proveedores = adquisiciones (clave A). No distingue prestaciones de servicios (S/I), triangulares ni rectificaciones, y el NIF-IVA es el NIF del tercero. No sustituye a la presentación en la AEAT.</p>
+  <table><tr><th>Clave</th><th>NIF-IVA</th><th>Nombre</th><th class="n">Base imponible</th></tr>
+  ${D.filas.map(o => `<tr><td>${o.clave}</td><td>${esc(o.t.cif || "")}</td><td>${esc(o.t.nombre || "")}</td><td class="n">${eur(o.base)}</td></tr>`).join("") || `<tr><td colspan="4" class="vacio">No hay operaciones intracomunitarias en este período.</td></tr>`}
+  ${D.filas.length ? `<tr class="tot"><td colspan="3">Total entregas (E)</td><td class="n">${eur(D.E)}</td></tr><tr class="tot"><td colspan="3">Total adquisiciones (A)</td><td class="n">${eur(D.A)}</td></tr>` : ""}</table></div>`, { tabs: ["Declaración recapitulativa"], vista: nomPer(), filtros: selPeriodo() });
+};
+
+/* Modelos 111, 115 y 123: retenciones practicadas en facturas de proveedor registradas */
+function datosRet(tipo, per = S.periodo) {
+  const [d, h] = rangoPeriodo(per);
+  const fs = S.d.facturas.filter(f => f.tipo === "C" && f.retencion_tipo === tipo && estadoF(f) === "Registrado" && fechaIva(f) >= d && fechaIva(f) <= h);
+  let base = 0, ret = 0; fs.forEach(f => { base = r2(base + totalesF(lineasF(f)).base); ret = r2(ret + retF(f)); });
+  return { fs, n: new Set(fs.map(f => f.tercero_id)).size, base, ret };
+}
+const manual111 = () => (S.d.manual.find(m => m.modelo === "111" && m.ejercicio === S.ej && m.periodo === S.periodo) || {}).datos || {};
+function detalleRet(D) {
+  return `<h3 style="margin-top:1.2rem">Facturas con retención incluidas</h3><table><tr><th>Fecha</th><th>Factura</th><th>NIF</th><th>Proveedor</th><th class="n">Base</th><th class="n">%</th><th class="n">Retención</th></tr>
+  ${D.fs.map(f => { const t = terPorId(f.tercero_id) || {}; return `<tr><td>${fechaIva(f)}</td><td>${esc(f.num_externo || f.numero)}</td><td>${esc(t.cif || "")}</td><td>${esc(t.nombre || "")}</td><td class="n">${eur(totalesF(lineasF(f)).base)}</td><td class="n">${+f.retencion_pct}</td><td class="n">${eur(retF(f))}</td></tr>`; }).join("") || `<tr><td colspan="7" class="vacio">No hay facturas con retención en este período.</td></tr>`}</table>`;
+}
+const casilla = (c, t, v, esN = false) => `<tr><td style="width:3.5rem"><b>${c}</b></td><td>${t}</td><td class="n">${esN ? v : eur(v)}</td></tr>`;
+V.m111 = () => {
+  const D = datosRet("111"), M = manual111(), mn = +M.n || 0, mi = r2(M.imp), mr = r2(M.ret), tot = r2(mr + D.ret);
+  const inp = (id, v, sz = 8) => `<input data-man id="${id}" size="${sz}" value="${v || ""}" placeholder="0">`;
+  return pagina("Modelo 111", btn("exportar", "Exportar a Excel (CSV)"), `<div class="lista"><p class="aviso">Retenciones e ingresos a cuenta de IRPF. Las de profesionales salen de las facturas de proveedor registradas con retención 111 (por fecha de IVA). Las del trabajo (nóminas) no hay módulo de nóminas: escríbalas a mano abajo y se guardan por período. Orientativo; no sustituye a la presentación en la AEAT.</p>
+  <h3>Rendimientos del trabajo (a mano)</h3><div class="row"><label>01 · Nº de perceptores<br>${inp("man-n", M.n)}</label><label>02 · Importe de percepciones<br>${inp("man-imp", M.imp, 12)}</label><label>03 · Retenciones<br>${inp("man-ret", M.ret, 12)}</label></div>
+  <h3>Rendimientos de actividades económicas (profesionales)</h3><table>${casilla("07", "Nº de perceptores", D.n, true)}${casilla("08", "Importe de las percepciones", D.base)}${casilla("09", "Importe de las retenciones", D.ret)}</table>
+  <h3 style="margin-top:1.2rem">Liquidación</h3><table>${casilla("28", "Total liquidación (03 + 09)", tot)}<tr class="tot"><td>30</td><td>Resultado a ingresar</td><td class="n">${eur(tot)}</td></tr></table>${detalleRet(D)}</div>`, { tabs: ["Autoliquidación"], vista: nomPer(), filtros: selPeriodo() });
+};
+V.m115 = () => {
+  const D = datosRet("115");
+  return pagina("Modelo 115", btn("exportar", "Exportar a Excel (CSV)"), `<div class="lista"><p class="aviso">Retenciones por arrendamiento de inmuebles urbanos: salen de las facturas de proveedor registradas con retención 115 (por fecha de IVA). Orientativo; no sustituye a la presentación en la AEAT.</p>
+  <table>${casilla("01", "Nº de perceptores", D.n, true)}${casilla("02", "Base de las retenciones e ingresos a cuenta", D.base)}${casilla("03", "Retenciones e ingresos a cuenta", D.ret)}${casilla("04", "A deducir (declaraciones anteriores)", 0)}<tr class="tot"><td>05</td><td>Resultado a ingresar</td><td class="n">${eur(D.ret)}</td></tr></table>${detalleRet(D)}</div>`, { tabs: ["Autoliquidación"], vista: nomPer(), filtros: selPeriodo() });
+};
+V.m123 = () => {
+  const D = datosRet("123");
+  return pagina("Modelo 123", btn("exportar", "Exportar a Excel (CSV)"), `<div class="lista"><p class="aviso">Retenciones sobre rendimientos del capital mobiliario (dividendos, intereses…): salen de las facturas de proveedor registradas con retención 123 (por fecha de IVA). Orientativo; no sustituye a la presentación en la AEAT.</p>
+  <table>${casilla("01", "Nº de perceptores", D.n, true)}${casilla("02", "Importe de las percepciones", D.base)}${casilla("03", "Importe de las retenciones e ingresos a cuenta", D.ret)}<tr class="tot"><td>10</td><td>Resultado a ingresar</td><td class="n">${eur(D.ret)}</td></tr></table>${detalleRet(D)}</div>`, { tabs: ["Autoliquidación"], vista: nomPer(), filtros: selPeriodo() });
+};
 function exportarActual() {
   const base = (S.emp.nombre || "empresa").replace(/[^\w]+/g, "_") + "_";
+  if (S.vista === "m390") { const D = datos390(); return descargarCSV(base + "modelo390_" + S.ej + ".csv", [["Concepto", "1T", "2T", "3T", "4T", "Año"], ...D.filas.map(r => [r[0], ...r.slice(1).map(nCSV)])]); }
+  if (S.vista === "m349") { const D = datos349(); return descargarCSV(base + "modelo349_" + S.periodo + "_" + S.ej + ".csv", [["Clave", "NIF-IVA", "Nombre", "Base imponible"], ...D.filas.map(o => [o.clave, o.t.cif || "", o.t.nombre || "", nCSV(o.base)])]); }
+  if (["m111", "m115", "m123"].includes(S.vista)) {
+    const tipo = S.vista.slice(1), D = datosRet(tipo), M = manual111();
+    const cab = [["Casilla", "Concepto", "Importe"]];
+    const filas = tipo === "111" ? [["01", "Perceptores trabajo (manual)", M.n || 0], ["02", "Percepciones trabajo (manual)", nCSV(M.imp)], ["03", "Retenciones trabajo (manual)", nCSV(M.ret)], ["07", "Perceptores profesionales", D.n], ["08", "Percepciones profesionales", nCSV(D.base)], ["09", "Retenciones profesionales", nCSV(D.ret)], ["28/30", "Total a ingresar", nCSV(r2(r2(M.ret) + D.ret))]]
+      : [["01", "Perceptores", D.n], ["02", "Base / percepciones", nCSV(D.base)], ["03", "Retenciones", nCSV(D.ret)], [tipo === "115" ? "05" : "10", "Resultado a ingresar", nCSV(D.ret)]];
+    const det = [[], ["Fecha", "Factura", "NIF", "Proveedor", "Base", "%", "Retención"], ...D.fs.map(f => { const t = terPorId(f.tercero_id) || {}; return [fechaIva(f), f.num_externo || f.numero, t.cif || "", t.nombre || "", nCSV(totalesF(lineasF(f)).base), nCSV(f.retencion_pct), nCSV(retF(f))]; })];
+    return descargarCSV(base + "modelo" + tipo + "_" + S.periodo + "_" + S.ej + ".csv", [...cab, ...filas, ...det]);
+  }
   if (S.vista === "libroiva") { const D = datosLibro(); descargarCSV(base + (S.libroIva === "V" ? "IVA_repercutido_" : "IVA_soportado_") + S.periodo + "_" + S.ej + ".csv", [D.cab, ...D.filas.map(r => r.map((c, i) => i >= 5 ? nCSV(c) : c)), D.tot.map((c, i) => i >= 5 ? nCSV(c) : c)]); }
   else if (S.vista === "m303") { const D = datos303(); descargarCSV(base + "modelo303_" + S.periodo + "_" + S.ej + ".csv", [["Casilla", "Concepto", "Base", "Importe"], ["01/03", "Devengado 4 %", nCSV(D.dev[4][0]), nCSV(D.dev[4][1])], ["04/06", "Devengado 10 %", nCSV(D.dev[10][0]), nCSV(D.dev[10][1])], ["07/09", "Devengado 21 %", nCSV(D.dev[21][0]), nCSV(D.dev[21][1])], ["27", "Total cuota devengada", "", nCSV(D.totDev)], ["28/29", "Deducible operaciones interiores corrientes", nCSV(D.sBase), nCSV(D.sCuota)], ["45", "Total a deducir", "", nCSV(D.sCuota)], ["46", "Diferencia", "", nCSV(D.resultado)]]); }
   else if (S.vista === "m347") { const D = datos347(), f = (t, L) => L.map(o => [t, o.t.cif || "", o.t.nombre || "", ...o.q.map(nCSV), nCSV(o.total)]); descargarCSV(base + "modelo347_" + S.ej + ".csv", [["Tipo", "NIF", "Nombre", "1T", "2T", "3T", "4T", "Total"], ...f("Cliente", D.cli), ...f("Proveedor", D.pro)]); }
@@ -589,6 +673,11 @@ document.addEventListener("change", async e => {
     else if (t.id === "fp") { S.filtroPend = t.value; render(); }
     else if (t.id === "per") { S.periodo = t.value; render(); }
     else if (t.id === "tl") { S.libroIva = t.value; render(); }
+    else if (t.dataset.man !== undefined) {
+      const v = id => document.getElementById(id).value.trim(), ex = S.d.manual.find(m => m.modelo === "111" && m.ejercicio === S.ej && m.periodo === S.periodo);
+      await db.guardarManual({ id: ex ? ex.id : uid(), empresa_id: S.emp.id, modelo: "111", ejercicio: S.ej, periodo: S.periodo, datos: { n: +v("man-n") || 0, imp: r2(num(v("man-imp"))), ret: r2(num(v("man-ret"))) } });
+      await recargar();
+    }
     else if (t.id === "busca") { const k = Object.keys(NOMBRES).find(x => NOMBRES[x].toLowerCase() === t.value.trim().toLowerCase()); if (k) { S.vista = k; render(); } }
     else if (t.dataset.l !== undefined) { leerForm(); render(); }
     else if (t.dataset.f !== undefined) {
@@ -598,7 +687,9 @@ document.addEventListener("change", async e => {
         if (t.value.trim() && (!x || x.tipo !== tp)) { alert("No existe esa cuenta de " + (tp === "C" ? "cliente." : "proveedor.")); F.tercero_id = null; }
         else { F.tercero_id = x ? x.id : null; if (x) S.fact.ls.forEach(l => { if (!l.tocado && !(+l.precio)) l.iva = ivaDefecto(x); }); }
         render();
-      } else { F[k] = t.value; if (k === "fecha_registro") F.fecha_iva = t.value; }
+      } else if (k === "retencion_tipo") { F.retencion_tipo = t.value; F.retencion_pct = t.value === "111" ? 15 : t.value ? 19 : 0; render(); }
+      else if (k === "retencion_pct") { F.retencion_pct = +num(t.value) || 0; refrescaF(); }
+      else { F[k] = t.value; if (k === "fecha_registro") F.fecha_iva = t.value; }
     }
     else if (t.dataset.fl !== undefined) {
       const l = S.fact.ls[+t.dataset.fl], k = t.dataset.k;
@@ -715,7 +806,7 @@ document.addEventListener("click", async e => {
     /* facturas */
     else if (a === "nuevafact") {
       const tp = b.dataset.t, pre = b.dataset.ter || "";
-      const f = { id: uid(), empresa_id: S.emp.id, tipo: tp, numero: siguienteFact(tp), tercero_id: pre || null, num_externo: "", fecha_emision: hoy(), fecha_registro: hoy(), fecha_iva: hoy(), fecha_vencimiento: "", estado: "abierto", asiento_id: null, notas: "" };
+      const f = { id: uid(), empresa_id: S.emp.id, tipo: tp, numero: siguienteFact(tp), tercero_id: pre || null, num_externo: "", fecha_emision: hoy(), fecha_registro: hoy(), fecha_iva: hoy(), fecha_vencimiento: "", estado: "abierto", asiento_id: null, notas: "", retencion_tipo: "", retencion_pct: 0 };
       S.vista = tp === "V" ? "fventa" : "fcompra"; S.fact = { f, ls: [nuevaLineaF(f)] }; render();
     }
     else if (a === "selfact") { S.selFact = b.dataset.id; render(); }
