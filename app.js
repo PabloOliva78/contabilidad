@@ -284,7 +284,8 @@ const EXTRA_J = ["cod_iva", "cod_ret", "factura", "vencimiento", "fecha_doc", "f
 function sinteticaFact(l) {
   const ex = l.extra || {}, prov = tipoDeLibro(l.libro) === "fprov", total = r2(ex.total || 0), c = ex.cod_iva ? CODIGO[ex.cod_iva] : null;
   const p = c && ["nac", "inv"].includes(c.tipo) ? (+c.pct || 0) : 0, t = Math.abs(total);
-  let b = r2(t / (1 + p / 100)); for (const d of [0, 0.01, -0.01]) { const bb = r2(b + d); if (r2(bb + r2(bb * p / 100)) === t) { b = bb; break; } }
+  const rcode = !prov && ex.cod_rec && ex.cod_rec === recDeCodigo(ex.cod_iva) ? CODIGO[ex.cod_rec] : null, pr = rcode ? rcode.pct : 0; // recargo de equivalencia de las ventas
+  let b = r2(t / (1 + (p + pr) / 100)); for (const d of [0, 0.01, -0.01]) { const bb = r2(b + d); if (r2(bb + r2(bb * p / 100) + r2(bb * pr / 100)) === t) { b = bb; break; } }
   const base = total < 0 ? -b : b;
   return { ...l, tipo_cuenta: l.contra_tipo || "Contabilidad", cuenta: l.contra_cuenta || "", debe: prov ? base : 0, haber: prov ? 0 : base, contra_tipo: prov ? "Proveedor" : "Cliente", contra_cuenta: l.cuenta || "" };
 }
@@ -311,13 +312,15 @@ function expandirLinea(l0) {
   const m = resolverCuenta(l.tipo_cuenta, l.cuenta); if (m.error) err.push(m.error);
   const hayContra = !!(l.contra_cuenta || "").trim(), mc = hayContra ? resolverCuenta(l.contra_tipo, l.contra_cuenta) : null; if (mc && mc.error) err.push("contrapartida: " + mc.error);
   if (ex.cod_iva && !c) err.push("código de impuestos desconocido"); if (ex.cod_ret && !cr) err.push("código de retención desconocido");
-  if ((c || cr) && !hayContra) err.push("el código de impuestos o de retención necesita cuenta de contrapartida");
+  const rc = ex.cod_rec ? CODIGO[ex.cod_rec] : null; if (rc && !(c && ex.cod_rec === recDeCodigo(ex.cod_iva))) err.push("el recargo " + ex.cod_rec + " no corresponde al código de impuestos");
+  if ((c || cr || rc) && !hayContra) err.push("el código de impuestos o de retención necesita cuenta de contrapartida");
   const add = (cuenta, imp, extra = {}) => { imp = r2(imp); if (!imp) return; ap.push({ cuenta, concepto: l.descripcion || null, debe: imp > 0 ? imp : 0, haber: imp < 0 ? -imp : 0, ...extra }); };
   let suma = base;
   add(m.cuenta, base, m.tercero_id ? { tercero_id: m.tercero_id } : {});
   if (hayContra && (c || cr)) {
     if (c && ["nac", "inv"].includes(c.tipo)) { iva = r2(Math.abs(base) * c.pct / 100); add(c.cta, s * iva); suma = r2(suma + s * iva); }
     else if (c && ["ue", "isp"].includes(c.tipo)) { const q = r2(Math.abs(base) * c.pct / 100); iva = q; add(c.cta, s * q); add(c.cta2, -s * q); } // autorrepercusión: el soportado y el repercutido se anulan
+    if (rc && c && ex.cod_rec === recDeCodigo(ex.cod_iva)) { const q = r2(Math.abs(base) * rc.pct / 100); iva = r2(iva + q); add(rc.cta, s * q); suma = r2(suma + s * q); } // recargo de equivalencia
     if (cr) { ret = r2(Math.abs(base) * cr.pct / 100); add(cr.cta, -s * ret); suma = r2(suma - s * ret); }
   }
   if (hayContra && !err.length) add(mc.cuenta, -suma, mc.tercero_id ? { tercero_id: mc.tercero_id } : {});
@@ -412,7 +415,7 @@ async function facturaDeLinea(l, aid) { // crea la factura registrada de una lí
   const numero = !prov && ex.factura && !S.d.facturas.some(f => f.tipo === "V" && f.numero === ex.factura) ? ex.factura : siguienteFact(tp);
   const f = { id: uid(), empresa_id: S.emp.id, tipo: tp, numero, tercero_id: t.id, num_externo: prov ? ex.factura : null, fecha_emision: ex.fecha_factura || l.fecha, fecha_registro: l.fecha, fecha_iva: l.fecha, fecha_vencimiento: ex.vencimiento || null, estado: "registrado", asiento_id: aid, notas: null,
     retencion_tipo: cr && prov ? cr.modelo : null, retencion_pct: cr ? cr.pct : 0, cod_ret: cr ? cr.cod : null };
-  const ld = { id: uid(), factura_id: f.id, empresa_id: S.emp.id, orden: 0, descripcion: l.descripcion || null, cuenta: l.contra_cuenta, cantidad: 1, precio: base, iva: c ? c.pct : 0, cod_iva: ex.cod_iva || null, cod_rec: null };
+  const ld = { id: uid(), factura_id: f.id, empresa_id: S.emp.id, orden: 0, descripcion: l.descripcion || null, cuenta: l.contra_cuenta, cantidad: 1, precio: base, iva: c ? c.pct : 0, cod_iva: ex.cod_iva || null, cod_rec: ex.cod_rec || null };
   await db.guardarFactura(f, [ld]); S.d.facturas.push(f); // se añade en memoria para que el siguiente número de factura no se repita
 }
 V.diario = () => vistaDiario("general");
@@ -512,6 +515,11 @@ function codDefecto(t, tipo) {
 const tipo_a_lado = tipo => tipo === "C" ? "C" : "V"; // el tipo de factura ya coincide con el lado del código (C compras, V ventas)
 const codsLinea = tipo => CODIGOS.filter(c => !c.oculto && (tipo === "C" ? ["nac", "ex", "inv", "ue", "isp", "imp"].includes(c.tipo) && c.lado === "C" : ["nac", "ex"].includes(c.tipo) && c.lado === "V"));
 const codsRec = () => CODIGOS.filter(c => c.tipo === "rec");
+// Recargo de equivalencia de las facturas emitidas: cada tipo de IVA lleva el suyo (21 % con 5,2 %, 10 % con 1,4 % y 4 % con 0,5 %)
+const RECARGO_DE = { 21: "R.RC.NR", 10: "R.RC.RD", 4: "R.RC.SR" };
+const recDe = pct => RECARGO_DE[+pct] || "";
+const recDeCodigo = cod => { const c = CODIGO[cod]; return c && c.tipo === "nac" && c.lado === "V" ? recDe(c.pct) : ""; };
+const aplicaRec = t => !!(t && t.ficha && (t.ficha.recargo || t.ficha.cod_rec)); // el cliente está sujeto a recargo de equivalencia
 const codsRet = tipo => CODIGOS.filter(c => tipo === "C" ? c.tipo === "ret" && !c.oculto : c.tipo === "retc");
 // cuentas fijas de IVA: 472000001 soportado nacional (todos los tipos), 472200001 soportado intracomunitario (autorrepercusión),
 // 472200002 DUAs, 477000001 repercutido nacional (todos los tipos), 477300001 repercutido intracomunitario (autorrepercusión)
@@ -575,7 +583,7 @@ function fichaTercero(tipo) {
   const fyE = `<div class="fgrid"><div class="fcol"><h4>FACTURA</h4>${campo("Cuenta de facturación", "ficha.fact.cuenta_fact", { opts: otros.map(t => [t.id, t.codigo + " · " + t.nombre]) })}${campo("Dirección de la factura", "ficha.fact.dir_fact", { opts: e.direcciones.map((d, i) => [String(i), d.desc || d.dir || "Dirección " + (i + 1)]) })}${campo("Grupo de secuencias numéricas", "ficha.fact.seq")}${campo("Plantilla de factura", "ficha.fact.plantilla")}</div>
     <div class="fcol"><h4>ENTREGA</h4>${campo("Zona de porte", "ficha.ent.zona")}${campo("Condiciones de entrega", "ficha.ent.cond", { opts: INCOTERMS })}${campo("Modo de entrega", "ficha.ent.modo")}${campo("Motivo de la entrega", "ficha.ent.motivo")}${campo("Código de destino", "ficha.ent.destino")}${campo("Calendario de recepción", "ficha.ent.calendario")}</div>
     <div class="fcol"><h4>IMPUESTOS Y CONTABILIDAD</h4>${campo("NIF", "cif")}${campo("Grupo de impuestos", "grupo_iva", { opts: [["NAC", "NAC · Nacional"], ["UE", "UE · Intracomunitario"], ["EXT", "EXT · Terceros países"]] })}${campo("Cuenta contable (9 dígitos)", "cuenta", { list: "dl", ph: "automática" })}
-      <h4 style="margin-top:.8rem">IMPUESTOS POR DEFECTO EN FACTURAS</h4>${campo("Combinación de impuestos", "ficha.comb", { opts: combos(lado).map(c => [c.id, c.nombre]) })}${campo("Código de impuestos", "ficha.cod_iva", { opts: codsLinea(lado).map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campo("Código de retención", "ficha.cod_ret", { opts: codsRet(lado).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]) })}${cli ? campo("Recargo de equivalencia", "ficha.cod_rec", { opts: codsRec().map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]) }) : ""}</div></div>`;
+      <h4 style="margin-top:.8rem">IMPUESTOS POR DEFECTO EN FACTURAS</h4>${campo("Combinación de impuestos", "ficha.comb", { opts: combos(lado).map(c => [c.id, c.nombre]) })}${campo("Código de impuestos", "ficha.cod_iva", { opts: codsLinea(lado).map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campo("Código de retención", "ficha.cod_ret", { opts: codsRet(lado).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]) })}${cli ? campo("Cliente con recargo de equivalencia (5,2 % con IVA 21 %, 1,4 % con 10 % y 0,5 % con 4 %)", "ficha.recargo", { check: true }) : ""}</div></div>`;
   return pagina(cli ? "Cliente" : "Proveedor", acc, `<datalist id="dl">${optsCuentas()}</datalist>${secFicha("gen", "General", general)}${secFicha("con", "Información de contacto", contacto)}${secFicha("pais", "País y direcciones", pais)}${secFicha("pago", "Condiciones de pago", pago)}${secFicha("fye", "Factura y entrega", fyE)}`,
     { tabs: ["Ficha"], vista: e.codigo + (e.nombre ? " : " + e.nombre : "") });
 }
@@ -620,7 +628,7 @@ function vistaFacturaEdit() {
   const filas = ls.map((l, i) => `<tr><td><input data-fl="${i}" data-k="descripcion" size="34" ${dis} value="${esc(l.descripcion || "")}"></td><td><input data-fl="${i}" data-k="cuenta" list="dl" size="9" ${dis} value="${esc(l.cuenta || "")}"></td>
    <td><input class="n" data-fl="${i}" data-k="cantidad" size="7" ${dis} value="${l.cantidad}"></td><td><input class="n" data-fl="${i}" data-k="precio" size="10" ${dis} value="${l.precio}"></td>
    <td><select data-fl="${i}" data-k="cod" ${dis}>${optsHtml(codsLinea(f.tipo).map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]), l.cod)}</select></td>
-   ${cli ? `<td><select data-fl="${i}" data-k="rec" ${dis}>${optsHtml(codsRec().map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), l.rec)}</select></td>` : ""}
+   ${cli ? `<td><select data-fl="${i}" data-k="rec" ${dis}>${optsHtml(codsRec().filter(c => c.cod === recDeCodigo(l.cod)).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), l.rec)}</select></td>` : ""}
    <td class="n" data-imp="${i}">${eur((+l.cantidad || 0) * (+l.precio || 0))}</td><td>${reg ? "" : `<button class="d" data-a="dellineaf" data-i="${i}">✕</button>`}</td></tr>`).join("");
   return pagina(cli ? "Factura de cliente" : "Factura de proveedor", acc, `${cab}
   <div class="pagina"><div class="lista"><table class="editable"><tr><th>Descripción</th><th>${cli ? "Cuenta de ingresos" : "Cuenta de gastos"}</th><th class="n">Cantidad</th><th class="n">Precio unitario</th><th>Código de impuestos</th>${cli ? "<th>Recargo</th>" : ""}<th class="n">Importe</th><th></th></tr>${filas}</table>
@@ -643,7 +651,7 @@ function refrescaF() {
 // IVA por defecto: nacional 21 %; proveedor UE 21 % que se autorrepercute; cliente UE o terceros países 0 % (exento)
 function nuevaLineaF(f) {
   const t = terPorId(f.tercero_id), cod = codDefecto(t, f.tipo), k = CODIGO[cod];
-  return { id: null, descripcion: "", cuenta: primeraCuenta(f.tipo === "V" ? "700" : "600"), cantidad: 1, precio: 0, iva: k ? k.pct : 0, cod, rec: f.tipo === "V" && t && t.ficha && t.ficha.cod_rec ? t.ficha.cod_rec : "", auto: !!k && (k.tipo === "ue" || k.tipo === "isp") };
+  return { id: null, descripcion: "", cuenta: primeraCuenta(f.tipo === "V" ? "700" : "600"), cantidad: 1, precio: 0, iva: k ? k.pct : 0, cod, rec: f.tipo === "V" && aplicaRec(t) ? recDeCodigo(cod) : "", auto: !!k && (k.tipo === "ue" || k.tipo === "isp") };
 }
 function abrirFactura(id) { const f = S.d.facturas.find(x => x.id === id); if (!f) return; S.fact = { f: { ...f }, ls: lineasF(f).map(l => ({ ...l })) }; S.selFact = id; if (!S.fact.ls.length) S.fact.ls.push(nuevaLineaF(S.fact.f)); render(); }
 async function guardarFactura() {
@@ -662,7 +670,10 @@ async function registrarFactura() {
   if (!cli && !(f.num_externo || "").trim()) err.push("Falta el nº de factura del proveedor.");
   const validas = ls.filter(l => (+l.cantidad || 0) * (+l.precio || 0) !== 0);
   if (!validas.length) err.push("La factura no tiene líneas con importe.");
-  validas.forEach((l, i) => { if (!cuentaValida(l.cuenta)) err.push("Línea " + (i + 1) + ": la cuenta " + (l.cuenta || "(vacía)") + " no existe o no es de movimiento (9 dígitos)."); });
+  validas.forEach((l, i) => {
+    if (!cuentaValida(l.cuenta)) err.push("Línea " + (i + 1) + ": la cuenta " + (l.cuenta || "(vacía)") + " no existe o no es de movimiento (9 dígitos).");
+    if (l.rec && l.rec !== recDeCodigo(codLinea(f, l).cod)) err.push("Línea " + (i + 1) + ": el recargo " + l.rec + " no corresponde a su código de impuestos (5,2 % con IVA 21 %, 1,4 % con 10 % y 0,5 % con 4 %).");
+  });
   const ctrl = t ? (t.cuenta || "") : "";
   if (t && !cuentaValida(ctrl)) err.push("El " + (cli ? "cliente" : "proveedor") + " no tiene una cuenta contable de 9 dígitos válida. Edítelo y guárdelo.");
   const tot = totalesF(validas), ret = retDe(f, tot.base), cr = CODIGO[codRetEfectivo(f)];
@@ -714,7 +725,7 @@ const comboDe = id => combos().find(c => c.id === id);
 function aplicarRet(F, cod) { const c = CODIGO[cod]; F.cod_ret = c ? cod : ""; F.retencion_pct = c ? c.pct : 0; F.retencion_tipo = c && F.tipo === "C" ? c.modelo : ""; }
 function aplicarCombo(F, ls, c) { // pone el código de IVA en todas las líneas, el recargo (ventas) y la retención
   const k = CODIGO[c.iva]; F.comb = c.id;
-  ls.forEach(l => { l.cod = c.iva; l.iva = k ? k.pct : 0; l.auto = !!k && (k.tipo === "ue" || k.tipo === "isp"); l.rec = F.tipo === "V" ? (c.rec || "") : ""; l.tocado = true; });
+  ls.forEach(l => { l.cod = c.iva; l.iva = k ? k.pct : 0; l.auto = !!k && (k.tipo === "ue" || k.tipo === "isp"); l.rec = F.tipo === "V" && c.rec ? recDeCodigo(c.iva) : ""; l.tocado = true; });
   aplicarRet(F, c.ret || "");
 }
 const retF = f => retDe(f, totalesF(lineasF(f)).base);
@@ -978,7 +989,7 @@ V.combos = () => {
     <label class="fld">Operación<select data-cf="lado"><option value="C" ${F.lado === "C" ? "selected" : ""}>Compras</option><option value="V" ${F.lado === "V" ? "selected" : ""}>Ventas</option></select></label>
     <label class="fld">Código de impuestos<select data-cf="iva">${optsHtml(codsLinea(F.lado).map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]), F.iva)}</select></label>
     <label class="fld">Código de retención<select data-cf="ret">${optsHtml(codsRet(F.lado).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), F.ret)}</select></label>
-    ${F.lado === "V" ? `<label class="fld">Recargo de equivalencia<select data-cf="rec">${optsHtml(codsRec().map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), F.rec)}</select></label>` : ""}
+    ${F.lado === "V" ? `<label class="fld">Recargo de equivalencia (el que acompaña a ese IVA)<select data-cf="rec">${optsHtml(codsRec().filter(c => c.cod === recDeCodigo(F.iva)).map(c => [c.cod, c.cod + " · " + String(c.pct).replace(".", ",") + " %"]), F.rec)}</select></label>` : ""}
     <button class="p" data-a="guardarcombo">Guardar</button><button data-a="cancelarcombo">Cancelar</button></div></div>` : "";
   return pagina("Combinaciones de impuestos", btn("nuevocombo", "+ Nueva combinación") + btn("delcombo", "Eliminar", "", !sel || !propias.has(sel.id)),
     `${form}<div class="lista"><table><tr><th>Id.</th><th>Nombre</th><th>Operación</th><th>Código de impuestos</th><th>Retención</th><th>Recargo</th><th>Origen</th></tr>${filas}</table></div>
@@ -1104,9 +1115,9 @@ document.addEventListener("change", async e => {
     if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
     else if (t.dataset.tf !== undefined) {
       setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.value);
-      if (t.dataset.tf === "ficha.comb") { const c = comboDe(t.value); if (c) { S.terEdit.ficha.cod_iva = c.iva; S.terEdit.ficha.cod_ret = c.ret || ""; S.terEdit.ficha.cod_rec = c.rec || ""; } render(); } // la combinación rellena el código de impuestos, el de retención y el recargo
+      if (t.dataset.tf === "ficha.comb") { const c = comboDe(t.value); if (c) { S.terEdit.ficha.cod_iva = c.iva; S.terEdit.ficha.cod_ret = c.ret || ""; S.terEdit.ficha.recargo = !!c.rec; } render(); } // la combinación rellena el código de impuestos, el de retención y el recargo
     }
-    else if (t.dataset.cf !== undefined) { S.comboForm[t.dataset.cf] = t.value; if (t.dataset.cf === "lado") { S.comboForm.iva = codsLinea(t.value)[0].cod; S.comboForm.ret = ""; S.comboForm.rec = ""; } render(); }
+    else if (t.dataset.cf !== undefined) { S.comboForm[t.dataset.cf] = t.value; if (t.dataset.cf === "lado") { S.comboForm.iva = codsLinea(t.value)[0].cod; S.comboForm.ret = ""; S.comboForm.rec = ""; } if (S.comboForm.rec && S.comboForm.rec !== recDeCodigo(S.comboForm.iva)) S.comboForm.rec = ""; render(); }
     else if (t.dataset.tl !== undefined) {
       const L = S.terEdit[t.dataset.tl], r = L[+t.dataset.i], k = t.dataset.k;
       r[k] = t.type === "checkbox" ? t.checked : t.value;
@@ -1145,7 +1156,7 @@ document.addEventListener("change", async e => {
             const fi = x.ficha || {}, cb = fi.comb && comboDe(fi.comb);
             if (cb && cb.lado === F.tipo && S.fact.ls.every(l => !l.tocado && !(+l.precio))) aplicarCombo(F, S.fact.ls, cb);
             else {
-              S.fact.ls.forEach(l => { if (!l.tocado && !(+l.precio)) { const cd = codDefecto(x, F.tipo), k = CODIGO[cd]; l.cod = cd; l.iva = k ? k.pct : 0; l.auto = !!k && (k.tipo === "ue" || k.tipo === "isp"); l.rec = F.tipo === "V" ? (fi.cod_rec || "") : ""; } });
+              S.fact.ls.forEach(l => { if (!l.tocado && !(+l.precio)) { const cd = codDefecto(x, F.tipo), k = CODIGO[cd]; l.cod = cd; l.iva = k ? k.pct : 0; l.auto = !!k && (k.tipo === "ue" || k.tipo === "isp"); l.rec = F.tipo === "V" && aplicaRec(x) ? recDeCodigo(cd) : ""; } });
               if (fi.cod_ret && !F.cod_ret) aplicarRet(F, fi.cod_ret);
             }
           }
@@ -1162,7 +1173,7 @@ document.addEventListener("change", async e => {
     }
     else if (t.dataset.fl !== undefined) {
       const l = S.fact.ls[+t.dataset.fl], k = t.dataset.k;
-      if (k === "cod") { const c = CODIGO[t.value]; l.cod = t.value; l.iva = c ? c.pct : 0; l.auto = !!c && (c.tipo === "ue" || c.tipo === "isp"); l.tocado = true; S.fact.f.comb = ""; }
+      if (k === "cod") { const c = CODIGO[t.value]; l.cod = t.value; l.iva = c ? c.pct : 0; l.auto = !!c && (c.tipo === "ue" || c.tipo === "isp"); l.tocado = true; S.fact.f.comb = ""; if (l.rec) l.rec = recDeCodigo(t.value); render(); }
       else l[k] = (k === "cantidad" || k === "precio") ? (+num(t.value) || 0) : t.value;
       refrescaF();
     }
@@ -1183,9 +1194,10 @@ document.addEventListener("change", async e => {
       if (fj) { // al elegir el proveedor o cliente se proponen su IVA, su retención, la cuenta de gasto o ingreso y el vencimiento
         const ex = l.extra = l.extra || {}, tt = terPorCod(l.cuenta), lado = tl === "fprov" ? "C" : "V";
         if (k === "vencimiento") ex.vencAuto = false;
+        if (k === "cod_iva" && lado === "V") ex.cod_rec = ex.cod_rec ? recDeCodigo(ex.cod_iva) : ""; // si el cliente lleva recargo, se ajusta al nuevo tipo de IVA
         if (tt && (k === "cuenta" || k === "fecha_factura" || k === "fecha")) {
           const fi = tt.ficha || {}, cb = fi.comb && comboDe(fi.comb);
-          if (k === "cuenta") { if (!ex.cod_iva) ex.cod_iva = (cb && cb.lado === lado ? cb.iva : "") || codDefecto(tt, lado); if (!ex.cod_ret) ex.cod_ret = (cb && cb.lado === lado ? cb.ret : "") || fi.cod_ret || ""; if (!l.contra_cuenta) l.contra_cuenta = primeraCuenta(lado === "C" ? "600" : "700"); }
+          if (k === "cuenta") { if (!ex.cod_iva) ex.cod_iva = (cb && cb.lado === lado ? cb.iva : "") || codDefecto(tt, lado); if (lado === "V") ex.cod_rec = aplicaRec(tt) ? recDeCodigo(ex.cod_iva) : ""; if (!ex.cod_ret) ex.cod_ret = (cb && cb.lado === lado ? cb.ret : "") || fi.cod_ret || ""; if (!l.contra_cuenta) l.contra_cuenta = primeraCuenta(lado === "C" ? "600" : "700"); }
           if (!ex.vencimiento || ex.vencAuto) { const vv = calcVenc(tt, ex.fecha_factura || l.fecha); if (vv) { ex.vencimiento = vv; ex.vencAuto = true; } }
         }
       }
