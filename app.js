@@ -166,7 +166,7 @@ const db = new Proxy({}, { get: (_, m) => (...a) => m === "empresas" ? listarEmp
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -234,13 +234,15 @@ const NAV = [
   { g: "Libro mayor", sec: [
     { n: "Entradas de diario", it: [["diario", "Diarios generales"]] },
     { n: "Consultas e informes", sub: [{ n: "Consultas", it: [["mayor", "Transacciones del libro mayor"]] }, { n: "Informes", it: [["sumas", "Balance de comprobación"], ["estados", "Estados financieros"]] }] },
-    { n: "Configurar", sub: [{ n: "Plan de cuentas", it: [["cuentas", "Cuentas principales"]] }] }] },
+    { n: "Configurar", sub: [{ n: "Plan de cuentas", it: [["cuentas", "Cuentas principales"]] }, { n: "Parámetros", it: [["parcont", "Parámetros de Contabilidad general"]] }] }] },
   { g: "Cuentas a cobrar", sec: [
     { n: "Clientes", it: [["clientes", "Todos los clientes"]] },
-    { n: "Facturas y cobros", sub: [{ n: "Facturas", it: [["fventa", "Facturas de cliente"], ["diariofcli", "Diario de facturas de cliente"]] }, { n: "Cobros", it: [["cobros", "Cobros pendientes"]] }] }] },
+    { n: "Facturas y cobros", sub: [{ n: "Facturas", it: [["fventa", "Facturas de cliente"], ["diariofcli", "Diario de facturas de cliente"]] }, { n: "Cobros", it: [["cobros", "Cobros pendientes"]] }] },
+    { n: "Configurar", it: [["parcli", "Parámetros de clientes"]] }] },
   { g: "Cuentas a pagar", sec: [
     { n: "Proveedores", it: [["proveedores", "Todos los proveedores"]] },
-    { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"], ["diariofprov", "Diario de facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] }] },
+    { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"], ["diariofprov", "Diario de facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] },
+    { n: "Configurar", it: [["parprov", "Parámetros de proveedores"]] }] },
   { g: "Ventas y marketing", sec: [
     { n: "Pedidos de venta", it: [["pventa", "Todos los pedidos de venta"]] }] },
   { g: "Compras y abastecimiento", sec: [
@@ -250,15 +252,16 @@ const NAV = [
     { n: "Consultas e informes", sub: [{ n: "Consultas", it: [["existencias", "Existencias disponibles"], ["movinv", "Transacciones de inventario"]] }] },
     { n: "Configurar", sub: [{ n: "Almacenes", it: [["almacenes", "Almacenes"]] }] }] },
   { g: "Impuestos", sec: [
-    { n: "Impuestos indirectos", sub: [{ n: "Impuestos", it: [["codigos", "Códigos de impuestos"], ["combos", "Combinaciones de impuestos"]] }] },
-    { n: "Consultas e informes", sub: [{ n: "Libros de impuestos", it: [["libroiva", "Libros de IVA"]] }] },
+    { n: "Impuestos indirectos", sub: [{ n: "Impuestos", it: [["codigos", "Códigos de impuestos"], ["combos", "Combinaciones de impuestos"], ["gimpuestos", "Grupos de impuestos"], ["gartic", "Grupos de impuestos de artículos"], ["gregistro", "Grupos de registro"], ["autoridades", "Autoridades fiscales"], ["periodosliq", "Períodos de liquidación de impuestos"]] }] },
+    { n: "Consultas e informes", sub: [{ n: "Consultas de impuestos", it: [["imptoreg", "Impuestos registrados"]] }, { n: "Libros de impuestos", it: [["libroiva", "Libros de IVA"]] }, { n: "Comercio exterior", it: [["intrastat", "Intrastat"]] }] },
     { n: "Declaraciones", sub: [
+      { n: "Liquidación", it: [["liqreg", "Liquidar y registrar impuestos"], ["pagosimp", "Pagos de impuestos"], ["informar", "Informar impuestos para el período de liquidación"], ["infiva", "Informes de IVA españoles"]] },
       { n: "Impuestos", it: [["m303", "Modelo 303 · IVA y liquidación"], ["m390", "Modelo 390 · Resumen anual de IVA"], ["m111", "Modelo 111 · Retenciones trabajo y profesionales"], ["m115", "Modelo 115 · Retenciones de alquileres"], ["m123", "Modelo 123 · Retenciones de capital mobiliario"], ["m347", "Modelo 347 · Operaciones con terceros"]] },
       { n: "Comercio exterior", it: [["m349", "Modelo 349 · Operaciones intracomunitarias"]] }] }] }
 ];
 const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -575,7 +578,7 @@ const INCOTERMS = ["EXW", "FCA", "CPT", "CIP", "DAP", "DPU", "DDP", "FAS", "FOB"
 const PAISES = [["ES", "España"], ["PT", "Portugal"], ["FR", "Francia"], ["DE", "Alemania"], ["IT", "Italia"], ["NL", "Países Bajos"], ["BE", "Bélgica"], ["LU", "Luxemburgo"], ["IE", "Irlanda"], ["AT", "Austria"], ["GR", "Grecia"], ["PL", "Polonia"], ["RO", "Rumanía"], ["BG", "Bulgaria"], ["HU", "Hungría"], ["CZ", "Chequia"], ["SK", "Eslovaquia"], ["SE", "Suecia"], ["DK", "Dinamarca"], ["FI", "Finlandia"], ["HR", "Croacia"], ["SI", "Eslovenia"], ["LT", "Lituania"], ["LV", "Letonia"], ["EE", "Estonia"], ["CY", "Chipre"], ["MT", "Malta"], ["GB", "Reino Unido"], ["AD", "Andorra"], ["CH", "Suiza"], ["MA", "Marruecos"], ["TR", "Turquía"], ["US", "Estados Unidos"], ["CN", "China"], ["IN", "India"], ["BR", "Brasil"], ["MX", "México"]];
 const getPath = (o, p) => p.split(".").reduce((a, k) => (a == null ? undefined : a[k]), o);
 const setPath = (o, p, v) => { const ks = p.split("."); let a = o; ks.slice(0, -1).forEach(k => { a[k] = a[k] || {}; a = a[k]; }); a[ks[ks.length - 1]] = v; };
-const terNuevo = tp => ({ id: uid(), tipo: tp, codigo: siguienteTer(tp), nombre: "", cif: "", grupo_iva: "NAC", telefono: "", email: "", cuenta: "", ficha: { tipoPersona: "Organización", pais: "ES", idioma: "es", pago: {}, fact: {}, ent: {} }, contactos: [], direcciones: [] });
+const terNuevo = tp => ({ id: uid(), tipo: tp, codigo: siguienteTer(tp), nombre: "", cif: "", grupo_iva: "NAC", telefono: "", email: "", cuenta: "", ficha: { tipoPersona: "Organización", pais: "ES", idioma: "es", pago: parm(tp === "C" ? "cli" : "prov", "condPago", "") ? { cond: parm(tp === "C" ? "cli" : "prov", "condPago") } : {}, fact: {}, ent: {}, ...(tp === "C" && parm("cli", "recargoDef", false) ? { recargo: true } : {}) }, contactos: [], direcciones: [] });
 const terClon = t => { const c = JSON.parse(JSON.stringify(t)); c.ficha = c.ficha || {}; ["pago", "fact", "ent"].forEach(k => { c.ficha[k] = c.ficha[k] || {}; }); c.ficha.pais = c.ficha.pais || "ES"; c.contactos = c.contactos || []; c.direcciones = c.direcciones || []; return c; };
 const optsHtml = (lista, v) => `<option value=""></option>` + lista.map(x => { const [k, n] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(k)}" ${String(k) === String(v ?? "") ? "selected" : ""}>${esc(n)}</option>`; }).join("");
 function campo(et, path, o = {}) {
@@ -771,7 +774,7 @@ function vistaPendientes(tipo) {
   const acc = btn("abrirpago", cli ? "Registrar cobro" : "Registrar pago", "", !puede) + btn("deshacerpago", "Deshacer último " + (cli ? "cobro" : "pago"), "", !sel || !liqsF(sel).length) + SEP + btn("abrirfact", "Abrir factura", `data-id="${sel ? sel.id : ""}"`, !sel);
   const form = sel && S.pagoF === sel.id ? `<div class="card"><b>${cli ? "Registrar cobro" : "Registrar pago"} · ${esc(sel.numero)}</b><div class="row" style="margin-top:.5rem">
     <label>Fecha<br><input type="date" id="pg-fecha" value="${hoyS}"></label><label>Importe<br><input id="pg-importe" size="12" value="${pendienteF(sel)}"></label>
-    <label>Cuenta de tesorería<br><input id="pg-banco" list="dl" size="12" value="${cuentaSis("572")}"></label>
+    <label>Cuenta de tesorería<br><input id="pg-banco" list="dl" size="12" value="${parm(cli ? "cli" : "prov", "cuentaTes", "") || cuentaSis("572")}"></label>
     <button class="p" data-a="guardarpago">Registrar</button><button data-a="cancelarpago">Cancelar</button></div>
     <datalist id="dl">${optsCuentas()}</datalist></div>` : "";
   const t = sel ? terPorId(sel.tercero_id) : null;
@@ -1133,7 +1136,8 @@ function fichaArticulo() {
   const e = S.artEdit, ctas = movs();
   const acc = `<button class="p" data-a="guardarart">Guardar</button>` + btn("cancelart", "Cancelar");
   const gen = `<div class="fgrid"><div class="fcol"><h4>ARTÍCULO</h4>${campoE("Número de artículo", "ae", e, "codigo")}${campoE("Nombre", "ae", e, "nombre")}${campoE("Nombre de búsqueda", "ae", e, "ficha.busqueda")}${campoE("Tipo", "ae", e, "tipo", { opts: ART_TIPOS })}${campoE("Grupo de artículos", "ae", e, "grupo")}${campoE("Descripción", "ae", e, "ficha.descripcion")}</div>
-    <div class="fcol"><h4>UNIDADES</h4>${campoE("Unidad de medida", "ae", e, "unidad", { list: "dlund" })}${campoE("Código de barras", "ae", e, "ficha.ean")}${campoE("Peso (kg)", "ae", e, "ficha.peso", { tipo: "number" })}${campoE("Bloqueado", "ae", e, "bloq", { check: true })}</div></div><datalist id="dlund">${["ud", "kg", "l", "m", "m²", "t", "caja", "h"].map(u => `<option value="${u}">`).join("")}</datalist>`;
+    <div class="fcol"><h4>UNIDADES</h4>${campoE("Unidad de medida", "ae", e, "unidad", { list: "dlund" })}${campoE("Código de barras", "ae", e, "ficha.ean")}${campoE("Peso (kg)", "ae", e, "ficha.peso", { tipo: "number" })}${campoE("Bloqueado", "ae", e, "bloq", { check: true })}</div>
+    <div class="fcol"><h4>IMPUESTOS Y COMERCIO EXTERIOR</h4>${campoE("Grupo de impuestos de artículos", "ae", e, "ficha.grupo_art", { opts: CF("gruposArt").map(g => [g.id, g.id + " · " + g.desc]) })}${campoE("Código Intrastat de la mercancía", "ae", e, "ficha.intrastat")}</div></div><datalist id="dlund">${["ud", "kg", "l", "m", "m²", "t", "caja", "h"].map(u => `<option value="${u}">`).join("")}</datalist>`;
   const comp = `<div class="fgrid"><div class="fcol"><h4>COMPRAS</h4>${campoE("Precio de compra", "ae", e, "precio_compra", { tipo: "number" })}${campoE("Código de impuestos (compras)", "ae", e, "cod_iva_c", { opts: codsLinea("C").map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campoE("Cuenta de gastos (9 dígitos)", "ae", e, "cuenta_compra", { list: "dlcta", ph: "600…" })}${campoE("Proveedor principal", "ae", e, "ficha.proveedor", { list: "dlprov" })}</div></div>`;
   const vent = `<div class="fgrid"><div class="fcol"><h4>VENTAS</h4>${campoE("Precio de venta", "ae", e, "precio_venta", { tipo: "number" })}${campoE("Código de impuestos (ventas)", "ae", e, "cod_iva_v", { opts: codsLinea("V").map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campoE("Cuenta de ingresos (9 dígitos)", "ae", e, "cuenta_venta", { list: "dlcta", ph: "700…" })}</div></div>`;
   const inv = `<div class="fgrid"><div class="fcol"><h4>INVENTARIO</h4>${campoE("Existencias mínimas", "ae", e, "stock_min", { tipo: "number" })}<label class="fld">Modelo de inventario<input value="Coste medio ponderado" disabled></label></div>
@@ -1209,6 +1213,8 @@ async function guardarAjuste() {
 }
 
 /* Pedidos de compra y de venta */
+// código de impuestos de un artículo para un tercero: por grupos de impuestos si el artículo tiene grupo; si no, el suyo o el del tercero
+const codArtPed = (a, t, tipo) => (a && codigoPorGrupos(grupoImpDe(t, tipo), (a.ficha || {}).grupo_art || parm("cont", "grupoArt", ""))) || (a && (tipo === "V" ? a.cod_iva_v : a.cod_iva_c)) || codDefecto(t, tipo);
 const nuevaLineaPed = p => {
   const t = terPorId(p.tercero_id), cod = codDefecto(t, p.tipo);
   return { id: uid(), articulo_id: null, descripcion: "", almacen_id: p.almacen_id || null, cantidad: 1, unidad: "", precio: 0, dto_pct: 0, cod_iva: cod, cod_rec: p.tipo === "V" && aplicaRec(t) ? recDeCodigo(cod) : "", tocado: false };
@@ -1349,7 +1355,7 @@ function cambioInv(t) { // cambios en formularios del inventario y los pedidos; 
     if (k === "art") {
       const a = t.value.trim() ? artPorCod(t.value) : null;
       if (t.value.trim() && !a) { alert("No existe ese artículo."); l.articulo_id = null; }
-      else if (a) { l.articulo_id = a.id; l.descripcion = a.nombre; l.unidad = a.unidad || ""; l.precio = +(p.tipo === "V" ? a.precio_venta : a.precio_compra) || 0; const cod = (p.tipo === "V" ? a.cod_iva_v : a.cod_iva_c) || codDefecto(t0, p.tipo); l.cod_iva = cod; l.cod_rec = p.tipo === "V" && aplicaRec(t0) ? recDeCodigo(cod) : ""; l.tocado = true; }
+      else if (a) { l.articulo_id = a.id; l.descripcion = a.nombre; l.unidad = a.unidad || ""; l.precio = +(p.tipo === "V" ? a.precio_venta : a.precio_compra) || 0; const cod = codArtPed(a, t0, p.tipo); l.cod_iva = cod; l.cod_rec = p.tipo === "V" && aplicaRec(t0) ? recDeCodigo(cod) : ""; l.tocado = true; }
       else l.articulo_id = null;
       render();
     } else if (k === "cod_iva") { l.cod_iva = t.value; l.tocado = true; if (l.cod_rec || (p.tipo === "V" && aplicaRec(t0))) l.cod_rec = recDeCodigo(t.value); render(); }
@@ -1432,6 +1438,245 @@ async function accionInv(a, b) { // clics del inventario y los pedidos; devuelve
   return false;
 }
 
+/* ---------------- Modelo de impuestos de D365: grupos, autoridades, períodos, impuestos registrados, parámetros ---------------- */
+// La configuración se guarda en modelos_manual (modelo "taxcfg"), sin tablas nuevas. Los valores iniciales salen de los códigos de impuestos.
+const lista = (f) => CODIGOS.filter(f).map(c => c.cod);
+const esArt = c => !["ret", "retc", "rec"].includes(c.tipo) && !c.oculto;
+const SEED = {
+  gruposReg: () => [
+    { id: "NACIONAL", desc: "Operaciones nacionales", rep: CTA.rep, sop: CTA.sop, gastoImp: "", impRep: "", liq: "475000001" },
+    { id: "INTRACOM", desc: "Operaciones intracomunitarias", rep: CTA.repUE, sop: CTA.sopUE, gastoImp: "", impRep: "", liq: "475000001" },
+    { id: "DUA", desc: "Operaciones con DUA", rep: "", sop: CTA.sopDUA, gastoImp: "", impRep: "", liq: "475000001" },
+    { id: "R.REC", desc: "Ventas con recargo", rep: "477100001", sop: "", gastoImp: "", impRep: "", liq: "" },
+    { id: "IRPF_PROF", desc: "IRPF profesionales y nóminas", rep: "", sop: "", gastoImp: "", impRep: "", liq: "475100001" },
+    { id: "IRPF_ALQ", desc: "IRPF alquileres", rep: "", sop: "", gastoImp: "", impRep: "", liq: "475100003" },
+    { id: "IRPF_DIV", desc: "IRPF dividendos e intereses", rep: "", sop: "", gastoImp: "", impRep: "", liq: "475100004" }],
+  gruposImp: () => [
+    { id: "S.NAC", desc: "Compras nacionales", lado: "C", codigos: lista(c => /^(S\.(NC|NAC)|IN)\./.test(c.cod)) },
+    { id: "S.UE", desc: "Compras intracomunitarias", lado: "C", codigos: lista(c => /^S\.UE\./.test(c.cod)) },
+    { id: "S.ISP", desc: "Compras con inversión del sujeto pasivo", lado: "C", codigos: lista(c => /^S\.ISP\./.test(c.cod)) },
+    { id: "S.EXT", desc: "Compras de terceros países", lado: "C", codigos: lista(c => /^S\.EX\./.test(c.cod) || /^DUA/.test(c.cod)) },
+    { id: "R.NAC", desc: "Ventas nacionales", lado: "V", codigos: lista(c => /^R\.(NC|NAC)\./.test(c.cod)) },
+    { id: "R.NAC_RC", desc: "Ventas nacionales con recargo", lado: "V", codigos: lista(c => /^R\.(NC|NAC|RC)\./.test(c.cod)) },
+    { id: "R.UE", desc: "Ventas intracomunitarias", lado: "V", codigos: lista(c => /^R\.UE(\.S)?$/.test(c.cod)) },
+    { id: "R.EXT", desc: "Ventas a terceros países", lado: "V", codigos: ["R.EX"] }],
+  gruposArt: () => { const g = (id, desc, f) => ({ id, desc, codigos: lista(c => esArt(c) && f(c)) }), p = n => c => c.pct === n && c.tipo !== "ex" && !/NS/.test(c.cod);
+    return [g("OP.NR", "Operaciones normales (21 %)", p(21)), g("OP.RD", "Operaciones reducidas (10 %)", p(10)), g("OP.RDN", "Operaciones reducidas (5 %)", p(5)), g("OP.SR", "Operaciones superreducidas (4 %)", p(4)), g("OP.SRN", "Operaciones superreducidas (2 %)", p(2)), g("OP.EX", "Operaciones exentas", c => !c.pct && !/NS/.test(c.cod)), g("OP.NS", "Operaciones no sujetas", c => /NS/.test(c.cod))]; },
+  autoridades: () => [], informes: () => [],
+  periodos: () => [{ id: "IVA", desc: "IVA modelo 303", autoridad: "", unidad: "Meses", duracion: 3, modelo: "303" }, { id: "IRPF", desc: "IRPF modelo 111", autoridad: "", unidad: "Meses", duracion: 3, modelo: "111" }, { id: "IRPF 115", desc: "IRPF modelo 115", autoridad: "", unidad: "Meses", duracion: 3, modelo: "115" }, { id: "IRPF 123", desc: "IRPF modelo 123", autoridad: "", unidad: "Meses", duracion: 3, modelo: "123" }],
+  params: () => ({})
+};
+const CF = k => { const d = ((S.d.manual || []).find(m => m.modelo === "taxcfg") || {}).datos || {}; return d[k] !== undefined ? d[k] : SEED[k](); };
+async function guardarCfg(k, v) {
+  const ex = S.d.manual.find(m => m.modelo === "taxcfg"), datos = { ...(ex ? ex.datos : {}), [k]: v }, rec = { id: ex ? ex.id : uid(), empresa_id: S.emp.id, modelo: "taxcfg", ejercicio: 0, periodo: "-", datos };
+  await db.guardarManual(rec); if (ex) ex.datos = datos; else S.d.manual.push(rec);
+}
+// determinador de código: el código de impuestos es el que está a la vez en el grupo de impuestos del tercero y en el grupo de impuestos del artículo
+const grupoImpDe = (t, tipo) => { const g = t ? t.grupo_iva : "NAC"; return tipo === "C" ? (g === "UE" ? "S.UE" : g === "EXT" ? "S.EXT" : "S.NAC") : (g === "UE" ? "R.UE" : g === "EXT" ? "R.EXT" : aplicaRec(t) ? "R.NAC_RC" : "R.NAC"); };
+const grupoArtDe = cod => (CF("gruposArt").find(g => g.codigos.includes(cod)) || {}).id || "";
+function codigoPorGrupos(gi, ga) {
+  const a = CF("gruposImp").find(g => g.id === gi), b = CF("gruposArt").find(g => g.id === ga); if (!a || !b) return "";
+  return a.codigos.filter(c => b.codigos.includes(c) && CODIGO[c] && CODIGO[c].tipo !== "rec").sort((x, y) => x.length - y.length)[0] || "";
+}
+const parm = (pg, k, def = "") => { const v = (CF("params")[pg] || {})[k]; return v === undefined ? def : v; };
+
+/* Páginas de mantenimiento con la misma forma: lista + formulario */
+const nCod = x => (x.codigos || []).length;
+const CFGDEF = {
+  gruposReg: { titulo: "Grupos de registro", cols: [["id", "Grupo de registro"], ["desc", "Descripción"], ["rep", "Impuestos repercutidos"], ["sop", "Impuestos soportados"], ["liq", "Cuenta de liquidación"]],
+    form: () => [["id", "Grupo de registro"], ["desc", "Descripción"], ["rep", "Impuestos repercutidos", { list: "dlcta" }], ["sop", "Impuestos soportados", { list: "dlcta" }], ["gastoImp", "Gasto de IVA de importación", { list: "dlcta" }], ["impRep", "IVA de importación repercutido", { list: "dlcta" }], ["liq", "Cuenta de liquidación", { list: "dlcta" }]], ctas: ["rep", "sop", "gastoImp", "impRep", "liq"] },
+  gruposImp: { titulo: "Grupos de impuestos", cols: [["id", "Grupo de impuestos"], ["desc", "Descripción"], ["lado", "Operación", x => x.lado === "C" ? "Compras" : "Ventas"], ["codigos", "Códigos de impuestos", x => nCod(x)]], form: () => [["id", "Grupo de impuestos"], ["desc", "Descripción"], ["lado", "Operación", { opts: [["C", "Compras"], ["V", "Ventas"]] }]], codigos: x => CODIGOS.filter(c => !c.oculto && c.tipo !== "ret" && c.tipo !== "retc" && c.lado === x.lado) },
+  gruposArt: { titulo: "Grupos de impuestos de artículos", cols: [["id", "Grupo de impuestos de artículos"], ["desc", "Descripción"], ["codigos", "Códigos de impuestos", x => nCod(x)]], form: () => [["id", "Grupo de impuestos de artículos"], ["desc", "Descripción"]], codigos: () => CODIGOS.filter(esArt) },
+  autoridades: { titulo: "Autoridades fiscales", cols: [["id", "Autoridad"], ["nombre", "Nombre"], ["nif", "Identificación de la autoridad"], ["proveedor", "Cuenta de proveedor"], ["tel", "Teléfono"]],
+    form: () => [["id", "Autoridad"], ["nombre", "Nombre"], ["nif", "Identificación de la autoridad"], ["proveedor", "Cuenta de proveedor", { list: "dlprov" }], ["redondeo", "Forma de redondear", { opts: ["Normal", "Hacia arriba", "Hacia abajo"] }], ["redondeoVal", "Redondear", { tipo: "number" }], ["direccion", "Dirección"], ["tel", "Teléfono"], ["movil", "Teléfono móvil"], ["email", "Correo electrónico"], ["web", "Dirección de Internet"]] },
+  periodos: { titulo: "Períodos de liquidación de impuestos", cols: [["id", "Período de liquidación"], ["desc", "Descripción"], ["autoridad", "Autoridad"], ["unidad", "Unidad de intervalo"], ["duracion", "Duración"], ["modelo", "Modelo"]],
+    form: () => [["id", "Período de liquidación"], ["desc", "Descripción"], ["autoridad", "Autoridad", { opts: CF("autoridades").map(a => [a.id, a.id + " · " + a.nombre]) }], ["unidad", "Unidad de intervalo de período", { opts: ["Meses"] }], ["duracion", "Duración del intervalo de período", { opts: [["1", "1 (mensual)"], ["3", "3 (trimestral)"], ["12", "12 (anual)"]] }], ["modelo", "Modelo (liquidación)", { opts: ["303", "111", "115", "123", "—"] }]] }
+};
+const perCod = (dur, i) => +dur === 3 ? (i + 1) + "T" : +dur === 1 ? "M" + String(i + 1).padStart(2, "0") : +dur === 12 ? "0A" : "";
+function intervalos(p, ej) { // intervalos del año según la duración del período de liquidación
+  const d = +p.duracion || 3, out = [], d2 = n => String(n).padStart(2, "0");
+  for (let i = 0; i * d < 12; i++) { const m1 = i * d + 1, m2 = Math.min(12, m1 + d - 1); out.push({ cod: perCod(d, i), desde: `${ej}-${d2(m1)}-01`, hasta: `${ej}-${d2(m2)}-${d2(new Date(ej, m2, 0).getDate())}` }); }
+  return out;
+}
+const liqDe = (modelo, ej, cod) => S.d.asientos.find(a => a.documento === `LIQ${modelo}-${ej}-${cod}`);
+function vistaCfg(k) {
+  const D = CFGDEF[k], L = CF(k), E = S.cfgEdit && S.cfgEdit.k === k ? S.cfgEdit : null, sel = L.find(x => x.id === S.selCfg[k]);
+  const filas = L.map(x => `<tr data-sel class="${sel && sel.id === x.id ? "sel" : ""}" data-a="cfgedit" data-k="${k}" data-id="${esc(x.id)}">${D.cols.map(c => `<td>${esc(c[2] ? c[2](x) : (x[c[0]] ?? ""))}</td>`).join("")}</tr>`).join("");
+  let form = "";
+  if (E) {
+    const campos = D.form().map(([f, et, o = {}]) => `<label class="fld">${et}${o.opts ? `<select data-cg="${f}">${optsHtml(o.opts, E.obj[f])}</select>` : `<input data-cg="${f}" type="${o.tipo || "text"}" ${o.list ? `list="${o.list}"` : ""} value="${esc(E.obj[f] ?? "")}" ${f === "id" && !E.nuevo ? "disabled" : ""}>`}</label>`).join("");
+    const cods = D.codigos ? `<h4 style="margin:.8rem 0 .3rem">CÓDIGOS DE IMPUESTOS DEL GRUPO</h4><div class="chkgrid">${D.codigos(E.obj).map(c => `<label class="chk"><input type="checkbox" data-cgc="${esc(c.cod)}" ${(E.obj.codigos || []).includes(c.cod) ? "checked" : ""}> ${esc(c.cod)} <span style="color:var(--tx2)">${c.pct ? String(c.pct).replace(".", ",") + " %" : esc(c.nombre)}</span></label>`).join("")}</div>` : "";
+    form = `<div class="card"><b>${E.nuevo ? "Nuevo" : "Editar"} · ${esc(D.titulo)}</b><div class="row" style="margin-top:.5rem">${campos}</div>${cods}<div class="row" style="margin-top:.6rem"><button class="p" data-a="cfgsave">Guardar</button><button data-a="cfgcancel">Cancelar</button></div></div>`;
+  }
+  let extra = "";
+  if (k === "periodos" && sel) {
+    const iv = intervalos(sel, S.ej);
+    extra = `<h3 style="margin-top:1rem">Intervalos de período ${S.ej} · ${esc(sel.id)}</h3><table><tr><th>Desde fecha</th><th>Hasta fecha</th><th>Código</th><th>Liquidado</th></tr>${iv.map(v => `<tr><td>${v.desde}</td><td>${v.hasta}</td><td>${v.cod}</td><td>${sel.modelo !== "—" && liqDe(sel.modelo, S.ej, v.cod) ? "Sí" : ""}</td></tr>`).join("")}</table>`;
+  }
+  if (k === "gruposImp" || k === "gruposArt") extra = sel ? `<h3 style="margin-top:1rem">Códigos de ${esc(sel.id)}</h3><table><tr><th>Código</th><th>Nombre</th><th class="n">Porcentaje</th></tr>${(sel.codigos || []).map(c => `<tr><td>${esc(c)}</td><td>${esc((CODIGO[c] || {}).nombre || "")}</td><td class="n">${(CODIGO[c] || {}).pct ? String(CODIGO[c].pct).replace(".", ",") + " %" : "—"}</td></tr>`).join("")}</table>` : "";
+  const acc = btn("cfgnuevo", "+ Nuevo", `data-k="${k}"`) + btn("cfgedit", "Editar", `data-k="${k}" data-id="${sel ? esc(sel.id) : ""}"`, !sel) + btn("cfgdel", "Eliminar", `data-k="${k}"`, !sel);
+  return pagina(D.titulo, acc, `<datalist id="dlcta">${optsCuentas()}</datalist><datalist id="dlprov">${S.d.terceros.filter(t => t.tipo === "P").map(t => `<option value="${esc(t.codigo)}">${esc(t.nombre)}</option>`).join("")}</datalist>${form}<div class="pagina"><div class="lista"><table><tr>${D.cols.map(c => `<th>${c[1]}</th>`).join("")}</tr>${filas || `<tr><td colspan="${D.cols.length}" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table>${extra}</div></div>`);
+}
+V.gimpuestos = () => vistaCfg("gruposImp"); V.gartic = () => vistaCfg("gruposArt"); V.gregistro = () => vistaCfg("gruposReg"); V.autoridades = () => vistaCfg("autoridades"); V.periodosliq = () => vistaCfg("periodos");
+
+/* Impuestos registrados: una fila por código de impuestos de cada factura registrada */
+function impuestosReg() {
+  const out = [];
+  S.d.facturas.filter(f => estadoF(f) === "Registrado").forEach(f => {
+    const t = terPorId(f.tercero_id) || {}, asi = S.d.asientos.find(a => a.id === f.asiento_id) || {}, cli = f.tipo === "V", gi = grupoImpDe(t, f.tipo);
+    const base = { asiento: asi.numero ? asi.ejercicio + "-" + String(asi.numero).padStart(5, "0") : "", fecha: fechaIva(f), factura: f.numero, origen: cli ? "Factura de venta" : "Factura de compra", gi, divisa: "EUR", tercero: t.nombre || "" };
+    const porCod = new Map(); let rec = new Map();
+    lineasF(f).forEach(l => { const c = codLinea(f, l), b = r2((+l.cantidad || 0) * (+l.precio || 0)); porCod.set(c.cod, r2((porCod.get(c.cod) || 0) + b)); if (cli && l.rec && CODIGO[l.rec]) rec.set(l.rec, r2((rec.get(l.rec) || 0) + b)); });
+    porCod.forEach((b, cod) => { const c = CODIGO[cod], cuota = r2(b * (+c.pct || 0) / 100), ga = grupoArtDe(cod);
+      if (c.tipo === "ue" || c.tipo === "isp") { out.push({ ...base, cod, ga, dir: "Impuestos soportados", base: b, cuota, pct: c.pct, auto: true, ue: c.tipo === "ue", exento: false }); out.push({ ...base, cod, ga, dir: "Impuestos repercutidos", base: b, cuota, pct: c.pct, auto: true, ue: c.tipo === "ue", exento: false }); }
+      else out.push({ ...base, cod, ga, dir: cli ? "Impuestos repercutidos" : "Impuestos soportados", base: b, cuota, pct: c.pct, auto: false, ue: !!c.ue, exento: !c.pct });
+    });
+    rec.forEach((b, cod) => { const c = CODIGO[cod]; out.push({ ...base, cod, ga: "", dir: "Impuestos repercutidos", base: b, cuota: r2(b * c.pct / 100), pct: c.pct, auto: false, ue: false, exento: false }); });
+    const cr = codRetEfectivo(f), ret = retF(f); if (cr && ret) out.push({ ...base, cod: cr, ga: "", dir: cli ? "Retención soportada" : "Retención practicada", base: totalesF(lineasF(f)).base, cuota: ret, pct: (CODIGO[cr] || {}).pct, auto: false, ue: false, exento: false });
+  });
+  return out.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.factura.localeCompare(b.factura));
+}
+const selPer = () => `<label>Período<select id="per">${PERIODOS.map(p => `<option value="${p[0]}" ${p[0] === S.periodo ? "selected" : ""}>${p[1]}</option>`).join("")}</select></label>`;
+V.imptoreg = () => {
+  const [d, h] = rangoPeriodo(S.periodo), dirF = S.filtroDirIR || "", tab = S.tabs.ir || "Visión general";
+  const L = impuestosReg().filter(r => r.fecha >= d && r.fecha <= h && (!dirF || r.dir === dirF));
+  const pc = n => n ? String(n).replace(".", ",") + " %" : "";
+  const cols = { "Visión general": [["Asiento", r => r.asiento], ["Fecha", r => r.fecha], ["Factura", r => r.factura], ["Origen", r => r.origen], ["Dirección del impuesto", r => r.dir], ["Grupo de impuestos", r => r.gi], ["Código de impuestos", r => r.cod], ["Grupo de impuestos de artículos", r => r.ga], ["Origen de importe", r => eur(r.base), 1], ["Importe de impuestos", r => eur(r.cuota), 1], ["Divisa", r => r.divisa]],
+    "General": [["Asiento", r => r.asiento], ["Código de impuestos", r => r.cod], ["Dirección del impuesto", r => r.dir], ["Exento", r => r.exento ? "Sí" : "No"], ["Automático", r => r.auto ? "Sí" : "No"], ["IVA intracomunitario", r => r.ue ? "Sí" : "No"], ["Período", r => (PERIODOS.find(p => p[0] === S.periodo) || [])[1]], ["Fecha del registro del IVA", r => r.fecha], ["Grupo de impuestos", r => r.gi], ["Grupo de impuestos de artículos", r => r.ga], ["Tercero", r => r.tercero]],
+    "Importe": [["Asiento", r => r.asiento], ["Código de impuestos", r => r.cod], ["Porcentaje / Importe", r => pc(r.pct), 1], ["Origen de importe", r => eur(r.base), 1], ["Importe de impuestos calculado", r => eur(r.cuota), 1], ["Importe real de impuestos", r => eur(r.cuota), 1], ["Impuestos no deducibles reales", r => eur(0), 1], ["Divisa", r => r.divisa]] }[tab];
+  const filas = L.map(r => `<tr>${cols.map(c => `<td class="${c[2] ? "n" : ""}">${esc(c[1](r))}</td>`).join("")}</tr>`).join("");
+  const sum = dir => eur(L.filter(r => r.dir === dir).reduce((a, r) => a + r.cuota, 0));
+  return pagina("Impuestos registrados", btn("irexport", "Exportar CSV") + btn("irliq", "Liquidar y registrar impuestos"), `<div class="lista"><table><tr>${cols.map(c => `<th class="${c[2] ? "n" : ""}">${c[0]}</th>`).join("")}</tr>${filas || `<tr><td colspan="${cols.length}" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div>
+   <div class="pie"><span>Repercutidos <b>${sum("Impuestos repercutidos")}</b></span><span>Soportados <b>${sum("Impuestos soportados")}</b></span><span>Retenciones practicadas <b>${sum("Retención practicada")}</b></span><span>Retenciones soportadas <b>${sum("Retención soportada")}</b></span></div>`,
+    { tabs: ["Visión general", "General", "Importe"], tabKey: "ir", filtros: selPer() + `<label>Dirección del impuesto<select id="fdirir"><option value="">Todas</option>${["Impuestos repercutidos", "Impuestos soportados", "Retención practicada", "Retención soportada"].map(x => `<option ${x === dirF ? "selected" : ""}>${x}</option>`).join("")}</select></label>` });
+};
+/* Liquidar y registrar impuestos / Pagos de impuestos / Informar impuestos / Informes de IVA */
+const MOD_VISTA = { "303": "m303", "111": "m111", "115": "m115", "123": "m123" };
+function selLiq() { // período de liquidación e intervalo elegidos
+  const ps = CF("periodos"), p = ps.find(x => x.id === S.liqPer) || ps[0] || null; if (!p) return {};
+  const iv = intervalos(p, S.ej), v = iv.find(x => x.cod === S.liqInt) || iv[Math.min(iv.length - 1, Math.floor(new Date().getMonth() / (+p.duracion || 3)))] || iv[0];
+  return { p, iv, v };
+}
+V.liqreg = () => {
+  const { p, iv, v } = selLiq(); if (!p) return pagina("Liquidar y registrar impuestos", "", `<p>No hay períodos de liquidación. Créelos en Períodos de liquidación de impuestos.</p>`);
+  const L = impuestosReg().filter(r => r.fecha >= v.desde && r.fecha <= v.hasta), s = d => r2(L.filter(r => r.dir === d).reduce((a, r) => a + r.cuota, 0));
+  const porCod = [...L.reduce((m, r) => { const k = r.dir + "|" + r.cod; const o = m.get(k) || { dir: r.dir, cod: r.cod, base: 0, cuota: 0 }; o.base = r2(o.base + r.base); o.cuota = r2(o.cuota + r.cuota); m.set(k, o); return m; }, new Map()).values()];
+  const ex = p.modelo !== "—" ? liqDe(p.modelo, S.ej, v.cod) : null, iva = p.modelo === "303", res = r2(s("Impuestos repercutidos") - s("Impuestos soportados"));
+  const form = `<div class="card"><div class="row"><label>Período de liquidación<br><select id="lq-per">${CF("periodos").map(x => `<option value="${esc(x.id)}" ${x.id === p.id ? "selected" : ""}>${esc(x.id)} · ${esc(x.desc)}</option>`).join("")}</select></label>
+    <label>Intervalo<br><select id="lq-int">${iv.map(x => `<option value="${x.cod}" ${x.cod === v.cod ? "selected" : ""}>${x.desde} – ${x.hasta}</option>`).join("")}</select></label>
+    <label>Versión de pago del impuesto<br><input disabled value="Original"></label><label>Estado<br><b>${ex ? "Liquidado (asiento " + ex.ejercicio + "-" + ex.numero + ")" : "Pendiente"}</b></label></div></div>`;
+  return pagina("Liquidar y registrar impuestos", btn("irliq2", ex ? "Ver liquidación" : "Liquidar y registrar", "", !MOD_VISTA[p.modelo]) + btn("pagosdeper", "Pagos de impuestos"), `${form}<div class="lista"><table><tr><th>Dirección del impuesto</th><th>Código de impuestos</th><th class="n">Base</th><th class="n">Importe de impuestos</th></tr>${porCod.map(o => `<tr><td>${esc(o.dir)}</td><td>${esc(o.cod)}</td><td class="n">${eur(o.base)}</td><td class="n">${eur(o.cuota)}</td></tr>`).join("") || `<tr><td colspan="4" class="vacio">Sin impuestos registrados en el intervalo.</td></tr>`}</table></div>
+   <div class="pie">${iva ? `<span>Repercutido <b>${eur(s("Impuestos repercutidos"))}</b></span><span>Soportado <b>${eur(s("Impuestos soportados"))}</b></span><span>${res >= 0 ? "A ingresar" : "A compensar / devolver"} <b>${eur(Math.abs(res))}</b></span>` : `<span>Retenciones practicadas <b>${eur(s("Retención practicada"))}</b></span>`}</div>
+   <p style="color:var(--tx2)">"Liquidar y registrar" abre la liquidación del modelo, que propone el asiento según el saldo de las cuentas de impuestos y permite generarlo o deshacerlo.</p>`, { tabs: ["Parámetros"] });
+};
+const NOM_LIQ = { "303": "IVA", "111": "IRPF 111", "115": "IRPF 115", "123": "IRPF 123" };
+const perRango = (ej, cod) => { const p = PERIODOS.find(x => x[0] === cod); if (!p) return ["", ""]; const d2 = n => String(n).padStart(2, "0"); return [`${ej}-${d2(p[2])}-01`, `${ej}-${d2(p[3])}-${d2(new Date(ej, p[3], 0).getDate())}`]; };
+V.pagosimp = () => {
+  const L = S.d.asientos.filter(a => (a.origen || "").startsWith("liquidacion-")).map(a => { const m = /^LIQ(\d+)-(\d{4})-(.+)$/.exec(a.documento || ""), [d, h] = m ? perRango(+m[2], m[3]) : ["", ""]; return { a, modelo: m ? m[1] : "", ej: m ? +m[2] : a.ejercicio, cod: m ? m[3] : "", d, h }; }).sort((x, y) => y.a.fecha.localeCompare(x.a.fecha)), sel = L.find(x => x.a.id === S.selPagoImp);
+  const filas = L.map(x => `<tr data-sel class="${sel && sel.a.id === x.a.id ? "sel" : ""}" data-a="selpagoimp" data-id="${x.a.id}"><td>${x.a.fecha}</td><td>${x.a.ejercicio}-${String(x.a.numero).padStart(5, "0")}</td><td>${esc(NOM_LIQ[x.modelo] || x.modelo)}</td><td>${x.d}</td><td>${x.h}</td><td>Original</td></tr>`).join("");
+  const ap = sel ? S.d.apuntes.filter(p => p.asiento_id === sel.a.id) : [];
+  return pagina("Pagos de impuestos", btn("verasiento", "Asiento", "", !sel) + btn("verimpreg", "Impuestos registrados", "", !sel), `<div class="pagina"><div class="lista"><table><tr><th>Fecha</th><th>Asiento</th><th>Período de liquidación</th><th>Desde fecha</th><th>Hasta fecha</th><th>Versión de pago del impuesto</th></tr>${filas || `<tr><td colspan="6" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div>
+   <aside class="factbox"><h3>Asiento de la liquidación</h3>${sel ? `<dl>${ap.map(p => `<dt>${esc(p.cuenta)} ${esc(nombreCuenta(p.cuenta))}</dt><dd>${+p.debe ? "D " + eur(p.debe) : "H " + eur(p.haber)}</dd>`).join("")}</dl>` : `<p style="color:var(--tx2)">Seleccione un pago.</p>`}</aside></div>`, { tabs: ["Visión general", "General", "Historial"] });
+};
+const infDe = () => CF("informes");
+V.infiva = () => {
+  const L = [...infDe()].sort((a, b) => b.desde.localeCompare(a.desde)), sel = L.find(x => x.id === S.selInf);
+  const filas = L.map(x => `<tr data-sel class="${sel && sel.id === x.id ? "sel" : ""}" data-a="selinf" data-id="${x.id}"><td>${x.desde}</td><td>${esc(x.libro)}</td><td>${esc(x.desc)}</td><td>${x.notificado ? "Sí · " + (x.fnot || "") : "No"}</td><td>${x.sustitutiva ? "Sí" : "No"}</td></tr>`).join("");
+  return pagina("Informes de IVA españoles", btn("informar", "Crear nuevo") + btn("marcarnot", sel && sel.notificado ? "Quitar notificado" : "Marcar notificado", "", !sel) + btn("delinf", "Eliminar", "", !sel) + SEP + btn("abrirmodelo", "Líneas / Totales / Salida", "", !sel), `<div class="lista"><table><tr><th>Desde fecha</th><th>Libro de IVA</th><th>Descripción</th><th>Notificado</th><th>Declaración sustitutiva</th></tr>${filas || `<tr><td colspan="5" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div>`, { tabs: ["Visión general", "General"] });
+};
+V.informar = () => {
+  const { p, iv, v } = selLiq(); if (!p) return pagina("Informar impuestos para el período de liquidación", "", `<p>No hay períodos de liquidación.</p>`);
+  const ya = infDe().find(x => x.modelo === p.modelo && x.ej === S.ej && x.cod === v.cod);
+  return pagina("Informar impuestos para el período de liquidación", `<button class="p" data-a="informar2">Informar impuestos</button>`, `<div class="card"><div class="row"><label>Período de liquidación<br><select id="lq-per">${CF("periodos").map(x => `<option value="${esc(x.id)}" ${x.id === p.id ? "selected" : ""}>${esc(x.id)} · ${esc(x.desc)}</option>`).join("")}</select></label><label>Intervalo<br><select id="lq-int">${iv.map(x => `<option value="${x.cod}" ${x.cod === v.cod ? "selected" : ""}>${x.desde} – ${x.hasta}</option>`).join("")}</select></label><label>Estado<br><b>${ya ? (ya.notificado ? "Notificado" : "Informe creado") : "Sin informar"}</b></label></div></div><p style="color:var(--tx2)">Crea (o actualiza) el informe de IVA del intervalo en "Informes de IVA españoles" y lo marca como notificado, con la fecha de hoy. Si ya estaba notificado, pregunta si es una declaración sustitutiva.</p>`, { tabs: ["Parámetros"] });
+};
+/* Intrastat: entregas y adquisiciones intracomunitarias de bienes de las facturas registradas */
+function filasIntrastat() {
+  const out = [];
+  S.d.facturas.filter(f => estadoF(f) === "Registrado").forEach(f => {
+    const t = terPorId(f.tercero_id) || {}, cli = f.tipo === "V", fi = t.ficha || {};
+    lineasF(f).forEach(l => {
+      const c = codLinea(f, l), bien = cli ? c.ue === "E" : (c.tipo === "ue" && c.bien); if (!bien) return;
+      const pl = S.d.plineas.find(x => x.id === l.pedido_linea_id), a = pl ? artPorId(pl.articulo_id) : null, imp = r2((+l.cantidad || 0) * (+l.precio || 0)), merc = a ? ((a.ficha || {}).intrastat || "") : "";
+      out.push({ fecha: fechaIva(f), dir: cli ? "Expedición" : "Llegada", pais: fi.pais || "", prov: parm("intrastat", "provincia", ""), trans: parm("intrastat", "transaccion", "11"), transp: parm("intrastat", "transporte", "3"), merc, peso: a ? r3((+(a.ficha || {}).peso || 0) * (+l.cantidad || 0)) : 0, imp, nif: t.cif || "", valido: !!(t.cif && fi.pais && fi.pais !== "ES" && merc), art: a ? a.codigo : "", cat: a ? (a.grupo || "") : "", factura: f.numero });
+    });
+  });
+  return out.sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+V.intrastat = () => {
+  const [d, h] = rangoPeriodo(S.periodo), L = filasIntrastat().filter(r => r.fecha >= d && r.fecha <= h);
+  const filas = L.map(r => `<tr class="${r.valido ? "" : "ko"}"><td>${r.fecha}</td><td>${r.dir}</td><td>${esc(r.pais)}</td><td>${esc(r.prov)}</td><td>${esc(r.trans)}</td><td>${esc(r.transp)}</td><td>${esc(r.merc)}</td><td class="n">${q3(r.peso)}</td><td class="n">${eur(r.imp)}</td><td class="n">${eur(r.imp)}</td><td>${esc(r.nif)}</td><td>${r.valido ? "Sí" : "No"}</td><td>${esc(r.art)}</td><td>${esc(r.cat)}</td><td>${esc(r.factura)}</td></tr>`).join("");
+  return pagina("Intrastat", btn("intraexport", "Archivo de Intrastat (CSV)"), `<div class="lista"><table><tr><th>Fecha</th><th>Dirección</th><th>País/región</th><th>Provincia de origen o destino</th><th>Código de transacción</th><th>Transporte</th><th>Código Intrastat de la mercancía</th><th class="n">Peso</th><th class="n">Importe de la factura</th><th class="n">Importe estadístico</th><th>NIF</th><th>Es válido</th><th>Código de artículo</th><th>Categoría</th><th>Factura</th></tr>${filas || `<tr><td colspan="15" class="vacio">No hay operaciones intracomunitarias de bienes en el período.</td></tr>`}</table></div>
+   <p style="color:var(--tx2)">Una fila es válida si el tercero tiene NIF y país (distinto de España) y el artículo tiene código Intrastat. Las facturas de pedidos enlazan con el artículo; las demás salen sin código.</p>`, { tabs: ["Visión general", "General"], filtros: selPer() });
+};
+/* Parámetros de contabilidad general, de proveedores y de clientes */
+const NIFC = ["", "Sí", "No"];
+const PARAM = {
+  parcont: { pg: "cont", titulo: "Parámetros de Contabilidad general", secs: { "Contabilidad": [["Comprobar los números continuos", "contInt", "chk", true], ["Interrumpir en caso de cuenta de errores", "interrumpir", "chk", true], ["Permitir varias transacciones en un asiento", "varias", "chk", true], ["Comprobar registro en diario", "compReg", "chk", true], ["Diario contable ampliado", "ampliado", "chk", false]],
+    "Impuestos": [["Grupo de impuestos de artículos por defecto", "grupoArt", "sel", "", () => CF("gruposArt").map(g => g.id)], ["Método de cálculo", "metodo", "sel", "Línea", () => ["Línea", "Total"]], ["Validar código de impuestos", "validarCod", "chk", true], ["Importe de impuestos incluidos", "incluidos", "chk", true], ["Impuesto no realizado", "noRealizado", "chk", true], ["Liquidación de IVA trimestral", "trimestral", "chk", false]],
+    "Cierre del ejercicio": [["Eliminar entradas existentes de fin de año al volver a cerrar", "elimCierre", "chk", true], ["Crear el asiento de cierre al lanzar el proceso", "crearCierre", "chk", true], ["Establecer el ejercicio en cerrado de forma permanente", "cerrarPerm", "chk", false]],
+    "Intrastat": [["Provincia de origen o destino", "provincia", "txt", ""], ["Código de transacción por defecto", "transaccion", "txt", "11"], ["Transporte por defecto", "transporte", "txt", "3"]] }, pgOf: { Intrastat: "intrastat" } },
+  parprov: { pg: "prov", titulo: "Parámetros de proveedores", secs: { "General": [["Requisito de NIF", "requisitoNIF", "chk", false], ["Grupo de impuestos obligatorio", "grupoObl", "chk", true], ["Copiar configuración Precios con impuestos incluidos del proveedor", "copiarPrecios", "chk", true]],
+    "Impuestos y contabilidad": [["Condiciones de pago por defecto", "condPago", "sel", "", () => CONDICIONES.map(c => [c[0], c[1]])], ["Cuenta de tesorería para pagos (9 dígitos)", "cuentaTes", "txt", ""], ["Registro del impuesto", "regImp", "sel", "Registro de facturas", () => ["Registro de facturas", "Registro de pagos"]], ["IVA intracomunitario", "ivaIntra", "chk", true]],
+    "Liquidación": [["Liquidar automáticamente al pagar", "liqAuto", "chk", true]] } },
+  parcli: { pg: "cli", titulo: "Parámetros de clientes", secs: { "General": [["Requisito de NIF", "requisitoNIF", "chk", false], ["Grupo de impuestos obligatorio", "grupoObl", "chk", true], ["Correo electrónico y teléfono obligatorios", "contactoObl", "chk", false]],
+    "Impuestos y contabilidad": [["Condiciones de pago por defecto", "condPago", "sel", "", () => CONDICIONES.map(c => [c[0], c[1]])], ["Cuenta de tesorería para cobros (9 dígitos)", "cuentaTes", "txt", ""], ["Recargo de equivalencia por defecto en clientes nuevos", "recargoDef", "chk", false]],
+    "Liquidación": [["Liquidar automáticamente al cobrar", "liqAuto", "chk", true]] } }
+};
+function vistaParam(k) {
+  const D = PARAM[k], tabs = Object.keys(D.secs), tab = S.tabs["par" + k] && tabs.includes(S.tabs["par" + k]) ? S.tabs["par" + k] : tabs[0];
+  const f = D.secs[tab].map(([et, c, tp, def, opts]) => { const pg = D.pgOf && D.pgOf[tab] ? D.pgOf[tab] : D.pg, v = parm(pg, c, def), at = `data-pm="${pg}|${c}"`;
+    return tp === "chk" ? `<label class="chk"><input type="checkbox" ${at} ${v ? "checked" : ""}> ${et}</label>` : tp === "sel" ? `<label class="fld">${et}<select ${at}>${optsHtml(opts(), v)}</select></label>` : `<label class="fld">${et}<input ${at} value="${esc(v)}"></label>`; }).join("");
+  return pagina(D.titulo, "", `<div class="fgrid"><div class="fcol">${f}</div></div><p style="color:var(--tx2)">Los cambios se guardan al momento. Aplicados hoy: requisito de NIF, condiciones de pago por defecto y cuenta de tesorería en terceros, y el grupo de impuestos de artículos por defecto. El resto queda registrado para las próximas fases.</p>`, { tabs, tabKey: "par" + k, vista: D.titulo });
+}
+V.parcont = () => vistaParam("parcont"); V.parprov = () => vistaParam("parprov"); V.parcli = () => vistaParam("parcli");
+
+async function accionImp(a, b) {
+  const id = b.dataset.id, k = b.dataset.k;
+  switch (a) {
+    case "cfgnuevo": S.cfgEdit = { k, nuevo: true, obj: k === "gruposImp" ? { id: "", desc: "", lado: "V", codigos: [] } : k === "gruposArt" ? { id: "", desc: "", codigos: [] } : k === "periodos" ? { id: "", desc: "", autoridad: "", unidad: "Meses", duracion: 3, modelo: "—" } : {} }; render(); return true;
+    case "cfgedit": { const x = CF(k).find(y => y.id === id); if (x) { S.selCfg[k] = x.id; S.cfgEdit = { k, nuevo: false, obj: JSON.parse(JSON.stringify(x)) }; render(); } return true; }
+    case "cfgcancel": S.cfgEdit = null; render(); return true;
+    case "cfgsave": {
+      const E = S.cfgEdit, o = E.obj, L = CF(E.k); o.id = (o.id || "").trim(); if (!o.id) { alert("Falta el código."); return true; }
+      if (E.nuevo && L.some(x => x.id.toLowerCase() === o.id.toLowerCase())) { alert("Ya existe ese código."); return true; }
+      for (const c of CFGDEF[E.k].ctas || []) if (o[c] && !esMov(o[c])) { alert("La cuenta " + o[c] + " debe tener 9 dígitos."); return true; }
+      if (E.k === "periodos") o.duracion = +o.duracion || 3;
+      await guardarCfg(E.k, E.nuevo ? [...L, o] : L.map(x => x.id === o.id ? o : x)); S.selCfg[E.k] = o.id; S.cfgEdit = null; render(); return true;
+    }
+    case "cfgdel": { const x = CF(k).find(y => y.id === S.selCfg[k]); if (x && confirm("¿Eliminar " + x.id + "?")) { await guardarCfg(k, CF(k).filter(y => y.id !== x.id)); S.selCfg[k] = null; render(); } return true; }
+    case "irexport": { const [d, h] = rangoPeriodo(S.periodo), L = impuestosReg().filter(r => r.fecha >= d && r.fecha <= h); descargarCSV("impuestos_registrados_" + S.periodo + "_" + S.ej + ".csv", [["Asiento", "Fecha", "Factura", "Origen", "Dirección", "Grupo de impuestos", "Código", "Grupo de artículos", "Base", "Importe"], ...L.map(r => [r.asiento, r.fecha, r.factura, r.origen, r.dir, r.gi, r.cod, r.ga, nCSV(r.base), nCSV(r.cuota)])]); return true; }
+    case "irliq": S.vista = "liqreg"; render(); return true;
+    case "irliq2": { const { p, v } = selLiq(); if (MOD_VISTA[p.modelo]) { S.periodo = v.cod; S.vista = MOD_VISTA[p.modelo]; render(); } return true; }
+    case "pagosdeper": S.vista = "pagosimp"; render(); return true;
+    case "selpagoimp": S.selPagoImp = id; render(); return true;
+    case "verasiento": case "verimpreg": { const m = S.d.asientos.find(x => x.id === S.selPagoImp), r = m && /^LIQ\d+-\d{4}-(.+)$/.exec(m.documento || ""); if (a === "verimpreg" && r) { S.periodo = r[1]; S.vista = "imptoreg"; render(); } else if (a === "verasiento") alert("El asiento aparece a la derecha, y en Transacciones del libro mayor."); return true; }
+    case "selinf": S.selInf = id; render(); return true;
+    case "informar": S.vista = "informar"; render(); return true;
+    case "informar2": {
+      const { p, v } = selLiq(); let L = infDe(), ya = L.find(x => x.modelo === p.modelo && x.ej === S.ej && x.cod === v.cod), hoyS = hoy();
+      if (ya && ya.notificado) { if (!confirm("Ya estaba notificado. ¿Marcarlo como declaración sustitutiva?")) return true; ya.sustitutiva = true; ya.fnot = hoyS; }
+      else if (ya) { ya.notificado = true; ya.fnot = hoyS; }
+      else { ya = { id: uid(), modelo: p.modelo, ej: S.ej, cod: v.cod, desde: v.desde, libro: "Modelo " + (p.modelo === "—" ? p.id : p.modelo), desc: p.desc + " " + v.cod + " " + S.ej, notificado: true, fnot: hoyS, sustitutiva: false }; L = [...L, ya]; }
+      await guardarCfg("informes", L); S.selInf = ya.id; S.vista = "infiva"; render(); return true;
+    }
+    case "marcarnot": { const L = infDe().map(x => x.id === S.selInf ? { ...x, notificado: !x.notificado, fnot: x.notificado ? "" : hoy() } : x); await guardarCfg("informes", L); render(); return true; }
+    case "delinf": if (confirm("¿Eliminar el informe?")) { await guardarCfg("informes", infDe().filter(x => x.id !== S.selInf)); S.selInf = null; render(); } return true;
+    case "abrirmodelo": { const x = infDe().find(y => y.id === S.selInf); if (x && MOD_VISTA[x.modelo]) { S.ej = x.ej; S.periodo = x.cod; S.vista = MOD_VISTA[x.modelo]; render(); } return true; }
+    case "intraexport": { const [d, h] = rangoPeriodo(S.periodo), L = filasIntrastat().filter(r => r.fecha >= d && r.fecha <= h); descargarCSV("intrastat_" + S.periodo + "_" + S.ej + ".csv", [["Fecha", "Dirección", "País", "Provincia", "Transacción", "Transporte", "Código mercancía", "Peso", "Importe factura", "Importe estadístico", "NIF", "Válido", "Artículo", "Categoría", "Factura"], ...L.map(r => [r.fecha, r.dir, r.pais, r.prov, r.trans, r.transp, r.merc, nCSV(r.peso), nCSV(r.imp), nCSV(r.imp), r.nif, r.valido ? "Sí" : "No", r.art, r.cat, r.factura])]); return true; }
+  }
+  return false;
+}
+async function cambioImp(t) {
+  const d = t.dataset;
+  if (d.cg !== undefined) { S.cfgEdit.obj[d.cg] = t.value; if (d.cg === "lado") { S.cfgEdit.obj.codigos = []; render(); } return true; }
+  if (d.cgc !== undefined) { const o = S.cfgEdit.obj, s = new Set(o.codigos || []); if (t.checked) s.add(d.cgc); else s.delete(d.cgc); o.codigos = [...s]; return true; }
+  if (d.pm !== undefined) { const [pg, c] = d.pm.split("|"), P = { ...CF("params") }; P[pg] = { ...(P[pg] || {}), [c]: t.type === "checkbox" ? t.checked : t.value }; if (c === "cuentaTes" && t.value && !esMov(t.value)) { alert("La cuenta debe tener 9 dígitos."); render(); return true; } await guardarCfg("params", P); return true; }
+  if (t.id === "lq-per") { S.liqPer = t.value; S.liqInt = ""; render(); return true; }
+  if (t.id === "lq-int") { S.liqInt = t.value; render(); return true; }
+  if (t.id === "fdirir") { S.filtroDirIR = t.value; render(); return true; }
+  return false;
+}
+
 /* ---------------- Render y eventos ---------------- */
 function render() {
   if (!S.empresas.length && !S.emp) return renderEmpresaNueva();
@@ -1499,6 +1744,7 @@ document.addEventListener("change", async e => {
   const t = e.target;
   try {
     if (cambioInv(t)) return;
+    if (await cambioImp(t)) return;
     if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
     else if (t.dataset.tf !== undefined) {
       setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.value);
@@ -1602,7 +1848,8 @@ document.addEventListener("click", async e => {
   const a = b.dataset.a;
   try {
     if (await accionInv(a, b)) return;
-    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; S.ped = null; S.artEdit = null; S.almEdit = null; S.ajuste = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
+    if (await accionImp(a, b)) return;
+    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; S.ped = null; S.artEdit = null; S.almEdit = null; S.ajuste = null; S.cfgEdit = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
     else if (a === "nav") { S.nav = !S.nav; if (S.nav) S.navMod = moduloDe(S.vista) || S.navMod; render(); }
     else if (a === "navmod") { S.navMod = b.dataset.id; render(); }
     else if (a === "navsec") { S.navCerr[b.dataset.id] = !S.navCerr[b.dataset.id]; render(); }
@@ -1755,6 +2002,7 @@ document.addEventListener("click", async e => {
         telefono: principal(c => c.tipo === "Teléfono" || c.tipo === "Móvil") || e2.telefono || null, email: principal(c => (c.tipo || "").startsWith("Correo")) || e2.email || null, cuenta: (e2.cuenta || "").trim() || null,
         ficha: e2.ficha || {}, contactos: ct, direcciones: e2.direcciones || [] };
       if (!t.codigo || !t.nombre) return alert("Faltan la cuenta y el nombre.");
+      if (parm(t.tipo === "C" ? "cli" : "prov", "requisitoNIF", false) && !t.cif) return alert("Falta el NIF (el parámetro «Requisito de NIF» está activado).");
       if (S.d.terceros.some(x => x.id !== t.id && x.codigo.toLowerCase() === t.codigo.toLowerCase())) return alert("Ya existe esa cuenta de cliente/proveedor.");
       // cada cliente/proveedor tiene su propia cuenta de 9 dígitos bajo 430 (clientes) o 400 (proveedores)
       const cli2 = t.tipo === "C", master = cli2 ? "430" : "400";
