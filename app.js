@@ -167,8 +167,11 @@ async function listarEmpresas() {
 }
 // db enruta cada operación al almacén de la empresa activa (nube, navegador o archivo de Drive)
 function vigilarPeriodo(m, a) { // en un período cerrado (calendario del libro mayor) no se tocan asientos
-  const fechas = m === "crearAsiento" ? [a[1]] : m === "modificarAsiento" ? [a[1], (S.d.asientos.find(x => x.id === a[0]) || {}).fecha] : m === "borrarAsiento" ? [(S.d.asientos.find(x => x.id === a[0]) || {}).fecha] : [];
-  const f = fechas.find(periodoCerrado); if (f) throw new Error("El período " + String(f).slice(0, 7) + " está cerrado en el calendario del libro mayor. Ábralo para registrar o modificar asientos de esa fecha.");
+  if (m === "crearAsiento" || m === "modificarAsiento" || m === "borrarAsiento") {
+    const ant = m === "crearAsiento" ? null : S.d.asientos.find(x => x.id === a[0]), apAnt = ant ? S.d.apuntes.filter(p => p.asiento_id === ant.id) : null;
+    const motivo = (ant && motivoBloqueo(ant.fecha, ant.origen, apAnt)) || (m === "crearAsiento" ? motivoBloqueo(a[1], a[4], a[3]) : m === "modificarAsiento" ? motivoBloqueo(a[1], ant && ant.origen, a[4]) : "");
+    if (motivo) throw new Error(motivo);
+  }
   const apuntes = m === "crearAsiento" ? a[3] : m === "modificarAsiento" ? a[4] : null, bl = apuntes && cuentaBloqueada(apuntes);
   if (bl) throw new Error("La cuenta " + bl + " está bloqueada (Control de cuentas principales). Desbloquéela para registrar en ella.");
 }
@@ -176,7 +179,7 @@ const db = new Proxy({}, { get: (_, m) => (...a) => { if (m === "empresas") retu
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, revFecha: "", revSaldos: null, lcCta: "", lcMarcas: null, ccFiltro: "", ecMes: "", ocBuscar: "", ocSel: null, rdHasta: "", cdA: "", cdB: "", impTexto: "", taTer: "", taMarcas: null, taImp: {}, taSel: null, taModo: "", taFecha: "", albForm: null, albMarcas: null, selAlb: null, albValorado: false, glDesde: "", glHasta: "", glNivel: "", glCta: "", glOrigen: "", finTipo: "", selTA: null, dimId: "", dimSolo: "", asgDest: null, asgForm: null, selAsg: null, selPdf: null, pdfMes: "", conEmps: null, conExcl: "", consol: null, fsEstado: "", fsDias: "", fsFiltro: "", fsMarcas: null, selFS: null, selPlant: null, selPeriodica: null, fsHasta: "", rectTipo: "", liqTer: "", liqMarcas: null, imprFact: "", selCred: null, djAbierto: null, djSel: null, djMostrar: "", djHasta: "", efSel: null, carteraTipo: "", carteraEst: "", selRem: null, extracto: null, antFecha: "", extTer: "", extDesde: "", extHasta: "", perMes: "", selPerio: null, libDesde: "", libHasta: "", afEdit: null, selAF: null, bajaAF: false, amortHasta: "", bancoSel: "", concilFecha: "", concilSaldo: "", concilMarcas: null, fechaRegul: "", selRegul: null, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, calP: "", calOtros: null, calEmps: null, calCargando: false, calEstado: "", calMod: "", calAcc: "", infDef: "", infVer: null, infNivel: "", infFecha: "", usuario: "", revFecha: "", revSaldos: null, lcCta: "", lcMarcas: null, ccFiltro: "", ecMes: "", ocBuscar: "", ocSel: null, rdHasta: "", cdA: "", cdB: "", impTexto: "", taTer: "", taMarcas: null, taImp: {}, taSel: null, taModo: "", taFecha: "", albForm: null, albMarcas: null, selAlb: null, albValorado: false, glDesde: "", glHasta: "", glNivel: "", glCta: "", glOrigen: "", finTipo: "", selTA: null, dimId: "", dimSolo: "", asgDest: null, asgForm: null, selAsg: null, selPdf: null, pdfMes: "", conEmps: null, conExcl: "", consol: null, fsEstado: "", fsDias: "", fsFiltro: "", fsMarcas: null, selFS: null, selPlant: null, selPeriodica: null, fsHasta: "", rectTipo: "", liqTer: "", liqMarcas: null, imprFact: "", selCred: null, djAbierto: null, djSel: null, djMostrar: "", djHasta: "", efSel: null, carteraTipo: "", carteraEst: "", selRem: null, extracto: null, antFecha: "", extTer: "", extDesde: "", extHasta: "", perMes: "", selPerio: null, libDesde: "", libHasta: "", afEdit: null, selAF: null, bajaAF: false, amortHasta: "", bancoSel: "", concilFecha: "", concilSaldo: "", concilMarcas: null, fechaRegul: "", selRegul: null, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -2273,11 +2276,63 @@ V.librodiario = () => {
   const filas = D.L.slice(0, 500).map(x => x.ap.map((p, i) => `<tr><td>${i ? "" : x.a.fecha}</td><td>${i ? "" : asNum(x.a)}</td><td>${p.cuenta}</td><td>${esc(nombreCuenta(p.cuenta))}</td><td>${esc(p.concepto || x.a.concepto || "")}</td><td class="n">${sal(+p.debe)}</td><td class="n">${sal(+p.haber)}</td></tr>`).join("")).join("");
   return pagina("Libro diario", btn("libcsv", "Exportar CSV") + btn("imprimir", "Imprimir"), `${D.L.length > 500 ? `<p>Se muestran 500 de ${D.L.length} asientos; el CSV los incluye todos.</p>` : ""}<div class="lista"><table><tr><th>Fecha</th><th>Asiento</th><th>Cuenta</th><th>Nombre</th><th>Descripción</th><th class="n">Debe</th><th class="n">Haber</th></tr>${filas || `<tr><td colspan="7" class="vacio">Sin asientos.</td></tr>`}<tr class="tot"><td colspan="5">Totales</td><td class="n">${eur(tot)}</td><td class="n">${eur(tot)}</td></tr></table></div>`, { tabs: ["Informe"], filtros: `<label>Desde<input type="date" id="lib-desde" value="${D.d}"></label><label>Hasta<input type="date" id="lib-hasta" value="${D.h}"></label>` });
 };
+/* Calendarios del libro mayor (como D365): períodos 0 a 13, estado por empresa y acceso por módulo */
+SEED.calendario = () => ({});
+const ESTADOS_PER = ["Abierto", "En espera", "Cerrado de forma permanente"], MODULOS_PER = ["Contabilidad", "Impuestos", "Banco", "Cliente", "Proveedor"];
+const periodosDe = ej => [{ k: ej + "-00", n: 0, ini: ej + "-01-01", fin: ej + "-01-01", tipo: "Apertura" }, ...MESES.map((m, i) => { const k = ej + "-" + String(i + 1).padStart(2, "0"); return { k, n: i + 1, ini: k + "-01", fin: finMes(k), tipo: "Operativo", mes: m }; }), { k: ej + "-13", n: 13, ini: ej + "-12-31", fin: ej + "-12-31", tipo: "Cierre" }];
+const clavePeriodo = (fecha, origen) => origen === "apertura" ? String(fecha).slice(0, 4) + "-00" : origen === "cierre" || origen === "regularizacion" ? String(fecha).slice(0, 4) + "-13" : String(fecha).slice(0, 7);
+// estado de un período según su configuración; los meses cerrados con la versión anterior cuentan como "En espera"
+const estadoDe = (cal, antiguos, k) => (cal[k] || {}).estado || (antiguos.includes(k) ? "En espera" : "Abierto");
+function moduloAsiento(origen, apuntes) {
+  const prov = (apuntes || []).some(p => /^4[01]/.test(p.cuenta));
+  if (String(origen || "").startsWith("liquidacion-")) return "Impuestos";
+  if (origen === "factura" || origen === "efecto" || origen === "compensacion") return prov ? "Proveedor" : "Cliente";
+  if (origen === "cobro" || origen === "letra") return "Cliente";
+  if (origen === "pago" || origen === "pagare") return "Proveedor";
+  if (origen === "transferencia" || origen === "extracto") return "Banco";
+  return "Contabilidad";
+}
+function motivoBloqueo(fecha, origen, apuntes) {
+  if (!fecha) return ""; const k = clavePeriodo(fecha, origen), cal = CF("calendario"), est = estadoDe(cal, CF("cerrados"), k), nom = "El período " + (+k.slice(5)) + " de " + k.slice(0, 4);
+  if (est !== "Abierto") return nom + " está «" + est + "» en el calendario del libro mayor.";
+  const mod = moduloAsiento(origen, apuntes); return ((cal[k] || {}).mods || {})[mod] === "Ninguno" ? nom + " no permite registrar desde el módulo " + mod + " (calendario del libro mayor)." : "";
+}
+const periodoCerrado = fecha => !!fecha && estadoDe(CF("calendario"), CF("cerrados"), String(fecha).slice(0, 7)) !== "Abierto";
+// configuración de calendario de las demás empresas (no incluye las guardadas en Drive)
+const cfgDeEmpresa = async eid => { if (eid === S.emp.id) return (S.d.manual || []).find(m => m.modelo === "taxcfg"); if (LOCAL) return (await baseDb().cargar(eid)).manual.find(m => m.modelo === "taxcfg"); const r = await sb.from("modelos_manual").select("*").eq("empresa_id", eid).eq("modelo", "taxcfg"); if (r.error) throw new Error(r.error.message); return r.data[0]; };
+const empresasCal = () => S.empresas.filter(e => e.id === S.emp.id || (e.almacen !== "drive" && S.emp.almacen !== "drive"));
+async function cargarCalendarios() {
+  if (S.calCargando) return; S.calCargando = true;
+  try { const out = {}; for (const e of empresasCal()) { const c = await cfgDeEmpresa(e.id); out[e.id] = { cal: ((c || {}).datos || {}).calendario || {}, cerr: ((c || {}).datos || {}).cerrados || [] }; } S.calOtros = out; if (S.vista === "calendario") render(); }
+  catch (err) { alert("No se pudieron leer los calendarios: " + err.message); S.calOtros = {}; }
+  finally { S.calCargando = false; }
+}
 V.calendario = () => {
-  const C = new Set(CF("cerrados")), meses = MESES.map((n, i) => ({ n, k: `${S.ej}-${String(i + 1).padStart(2, "0")}` }));
-  return pagina("Calendario del libro mayor", "", `<div class="lista"><table><tr><th>Período</th><th>Desde</th><th class="n">Asientos</th><th>Estado</th><th></th></tr>${meses.map(m => `<tr><td>${m.n} ${S.ej}</td><td>${m.k}-01</td><td class="n">${S.d.asientos.filter(a => a.fecha.startsWith(m.k)).length}</td><td class="${C.has(m.k) ? "ko" : "ok"}">${C.has(m.k) ? "En espera (cerrado)" : "Abierto"}</td><td><button data-a="cambiaper" data-id="${m.k}">${C.has(m.k) ? "Abrir" : "Cerrar"}</button></td></tr>`).join("")}</table></div><p style="color:var(--tx2)">En un período cerrado no se pueden registrar, modificar ni eliminar asientos desde ninguna pantalla.</p>`, { tabs: ["Períodos"], vista: "Ejercicio " + S.ej });
+  const P = periodosDe(S.ej), sel = P.find(p => p.k === S.calP) || P.find(p => p.k === S.ej + "-" + hoy().slice(5, 7)) || P[1];
+  if (!S.calOtros) setTimeout(cargarCalendarios, 0);
+  const O = { ...(S.calOtros || {}) }; O[S.emp.id] = { cal: CF("calendario"), cerr: CF("cerrados") };
+  const M = S.calEmps || (S.calEmps = new Set([S.emp.id])), E = empresasCal(), nota = (CF("calendario")[sel.k] || {}).nota || "";
+  const lista = P.map(p => { const e = estadoDe(CF("calendario"), CF("cerrados"), p.k); return `<a class="per ${p.k === sel.k ? "sel" : ""}" data-a="calper" data-id="${p.k}"><b>Período ${p.n}${p.mes ? " · " + p.mes : ""}</b><span>${p.ini} – ${p.fin}</span><span class="${e === "Abierto" ? "ok" : "ko"}">${e}</span></a>`; }).join("");
+  const filas = E.map(e => { const x = O[e.id]; if (!x) return `<tr><td></td><td>${esc(e.nombre)}</td><td colspan="${MODULOS_PER.length + 1}">Cargando…</td></tr>`; const est = estadoDe(x.cal, x.cerr, sel.k), mods = (x.cal[sel.k] || {}).mods || {};
+    return `<tr><td><input type="checkbox" data-calemp="${e.id}" ${M.has(e.id) ? "checked" : ""}></td><td>${esc(e.nombre)}</td><td class="${est === "Abierto" ? "ok" : "ko"}">${est}</td>${MODULOS_PER.map(m => `<td>${mods[m] === "Ninguno" ? "&lt;Ninguno&gt;" : "&lt;Todo&gt;"}</td>`).join("")}</tr>`; }).join("");
+  const op = (L, v) => L.map(x => `<option ${x === v ? "selected" : ""}>${x}</option>`).join("");
+  return pagina("Calendarios del libro mayor", btn("caltodas", "Marcar todas las empresas") + btn("vista", "Espacio de trabajo de cierre", 'data-v="espaciocierre"'), `<div class="cal"><div class="cal-per">${lista}</div><div class="cal-det">
+    <div class="card"><div class="fgrid"><div class="fcol"><h4>CALENDARIO</h4><label class="fld">Calendario<input disabled value="Fiscal"></label><label class="fld">Descripción<input disabled value="Año fiscal"></label></div><div class="fcol"><h4>EJERCICIO</h4><label class="fld">Fecha inicial<input disabled value="${S.ej}-01-01"></label><label class="fld">Fecha final<input disabled value="${S.ej}-12-31"></label></div><div class="fcol"><h4>PERÍODO FISCAL</h4><label class="fld">Tipo<input disabled value="${sel.tipo}"></label><label class="fld">Comentarios<input id="cal-nota" value="${esc(nota)}"></label></div></div></div>
+    <div class="card"><b>Entidades jurídicas</b><div class="row" style="margin:.5rem 0"><label>Estado del período<br><select id="cal-estado">${op(ESTADOS_PER, S.calEstado || "En espera")}</select></label><button data-a="calestado" ${M.size ? "" : "disabled"}>Actualizar estado del período</button><label>Módulo<br><select id="cal-mod">${op(MODULOS_PER, S.calMod || "Contabilidad")}</select></label><label>Acceso<br><select id="cal-acc">${op(["Todo", "Ninguno"], S.calAcc || "Ninguno")}</select></label><button data-a="calmodulo" ${M.size ? "" : "disabled"}>Actualizar acceso al módulo</button></div>
+    ${tablaGL(["", "Entidad jurídica", "Estado del período", ...MODULOS_PER], filas)}</div><p style="color:var(--tx2)">En un período que no esté abierto no se pueden registrar, modificar ni eliminar asientos. Con acceso «Ninguno», solo se bloquea ese módulo. «Cerrado de forma permanente» no se puede reabrir. El período 0 es el asiento de apertura y el 13, la regularización y el cierre.</p></div></div>`, { tabs: ["Períodos"], vista: "Ejercicio " + S.ej });
 };
-const periodoCerrado = fecha => fecha && (CF("cerrados") || []).includes(String(fecha).slice(0, 7));
+async function actualizarCalendario(cambio, sinPermanentes) { // aplica el cambio al período elegido en las empresas marcadas
+  const k = S.calP || S.ej + "-" + hoy().slice(5, 7), ids = [...S.calEmps], saltadas = [];
+  for (const id of ids) {
+    const rec = await cfgDeEmpresa(id), datos = { ...((rec || {}).datos || {}) }, cal = { ...(datos.calendario || {}) }, cerr = datos.cerrados || [];
+    if (sinPermanentes && estadoDe(cal, cerr, k) === "Cerrado de forma permanente") { saltadas.push((S.empresas.find(e => e.id === id) || {}).nombre); continue; }
+    cal[k] = cambio({ ...(cal[k] || {}), estado: estadoDe(cal, cerr, k) }); datos.calendario = cal; datos.cerrados = cerr.filter(x => x !== k);
+    const nuevo = { id: rec ? rec.id : uid(), empresa_id: id, modelo: "taxcfg", ejercicio: 0, periodo: "-", datos };
+    await (id === S.emp.id ? db : baseDb()).guardarManual(nuevo);
+    if (id === S.emp.id) { if (rec) rec.datos = datos; else S.d.manual.push(nuevo); }
+  }
+  S.calOtros = null; render(); if (saltadas.length) alert("Sin cambios en " + saltadas.join(", ") + ": el período está cerrado de forma permanente.");
+}
 
 /* ---------------- Activos fijos: transacciones y cuadro de amortización ---------------- */
 V.aftrans = () => {
@@ -2344,7 +2399,13 @@ async function accionTes(a, b) {
     case "addper": { const aid = document.getElementById("per-origen").value, as = S.d.asientos.find(x => x.id === aid), nombre = document.getElementById("per-nombre").value.trim() || as.concepto, dia = Math.min(28, Math.max(1, +document.getElementById("per-dia").value || 1)); await guardarCfg("periodicos", [...CF("periodicos"), { id: uid().slice(0, 8), nombre, dia, lineas: S.d.apuntes.filter(p => p.asiento_id === aid).map(p => ({ cuenta: p.cuenta, concepto: p.concepto || null, debe: +p.debe, haber: +p.haber })) }]); render(); return true; }
     case "delper": if (confirm("¿Eliminar la plantilla? Los asientos ya generados se conservan.")) { await guardarCfg("periodicos", CF("periodicos").filter(x => x.id !== S.selPerio)); S.selPerio = null; render(); } return true;
     case "genper": { const mes = mesAct(), P = CF("periodicos").filter(x => !S.d.asientos.some(a => a.documento === `PER-${x.id}-${mes}`)); if (!confirm("¿Generar " + P.length + " asiento(s) periódico(s) de " + mes + "?")) return true; for (const x of P) await db.crearAsiento(S.emp.id, mes + "-" + String(x.dia).padStart(2, "0"), x.nombre + " " + mes, x.lineas, "periodico", `PER-${x.id}-${mes}`); await recargar(); return true; }
-    case "cambiaper": { const C = new Set(CF("cerrados")), abre = C.has(id); if (confirm((abre ? "¿Abrir" : "¿Cerrar") + " el período " + id + "?")) { if (abre) C.delete(id); else C.add(id); await guardarCfg("cerrados", [...C].sort()); render(); } return true; }
+    case "calper": S.calP = id; render(); return true;
+    case "caltodas": S.calEmps = new Set(empresasCal().map(e => e.id)); render(); return true;
+    case "calestado": { const est = document.getElementById("cal-estado").value; S.calEstado = est; const p = periodosDe(S.ej).find(x => x.k === S.calP) || {};
+      if (!confirm("¿Poner «" + est + "» el período" + (p.n !== undefined ? " " + p.n : "") + " de " + S.ej + " en " + S.calEmps.size + " empresa(s)?" + (est === "Cerrado de forma permanente" ? "\n\nATENCIÓN: no se podrá volver a abrir." : ""))) return true;
+      await actualizarCalendario(c => ({ ...c, estado: est }), true); return true; }
+    case "calmodulo": { const m = document.getElementById("cal-mod").value, acc = document.getElementById("cal-acc").value; S.calMod = m; S.calAcc = acc; if (!confirm("¿Dar acceso «" + acc + "» al módulo " + m + " en " + S.calEmps.size + " empresa(s)?")) return true;
+      await actualizarCalendario(c => ({ ...c, mods: { ...(c.mods || {}), [m]: acc } }), true); return true; }
   }
   return false;
 }
@@ -2641,24 +2702,96 @@ function calcPyG(datos, hasta) {
   const g = t => r2(PYG.filter(x => x[2] === t).reduce((a, x) => a + V_.get(x[0]), 0)), E = g("E"), F = g("F"), I = g("I");
   return { V: V_, E, F, antes: r2(E + F), res: r2(E + F + I) };
 }
-function filasFinancieros() { // [texto, año actual, año anterior, tipo]
-  const h = rangoGL().h, ha = (+h.slice(0, 4) - 1) + h.slice(4);
-  if ((S.finTipo || "bal") === "bal") {
-    const A = calcBalance(S.d, h), B = calcBalance(S.d, ha), out = [];
-    [["A", "ACTIVO"], ["P", "PATRIMONIO NETO Y PASIVO"]].forEach(([lado, tit]) => { out.push([tit, null, null, "t"]); let ta = 0, tb = 0;
-      BAL.filter(x => x[0] === lado).forEach(([, g, L]) => { const ls = L.map(([n]) => { const k = lado + "|" + g + "|" + n; return [n, A.get(k) || 0, B.get(k) || 0, "l"]; }).filter(x => x[1] || x[2]), sa = r2(ls.reduce((s, x) => s + x[1], 0)), sb = r2(ls.reduce((s, x) => s + x[2], 0)); ta = r2(ta + sa); tb = r2(tb + sb); out.push([g, sa, sb, "g"], ...ls); });
-      out.push(["TOTAL " + tit, ta, tb, "t"]); });
-    return out;
-  }
-  const A = calcPyG(S.d, h), B = calcPyG(S.d, ha), lin = t => PYG.filter(x => x[2] === t).map(([n]) => [n, A.V.get(n), B.V.get(n), "l"]).filter(x => x[1] || x[2]);
-  return [...lin("E"), ["A) RESULTADO DE EXPLOTACIÓN", A.E, B.E, "g"], ...lin("F"), ["B) RESULTADO FINANCIERO", A.F, B.F, "g"], ["C) RESULTADO ANTES DE IMPUESTOS", A.antes, B.antes, "g"], ...lin("I"), ["D) RESULTADO DEL EJERCICIO", A.res, B.res, "t"]];
+/* Informes financieros (como D365): definiciones de informe, generación y copias guardadas; niveles de detalle */
+SEED.informesGen = () => [];
+// cuenta de pérdidas y ganancias normalizada: [grupo, epígrafe, [[subepígrafe, prefijos]]]
+const PYGN = [
+  ["E", "1. Importe neto de la cifra de negocios", [["a) Ventas", "700 701 702 703 704 706 708 709"], ["b) Prestaciones de servicios", "705"]]],
+  ["E", "2. Variación de existencias de productos terminados y en curso", [["", "71 6930 7930"]]],
+  ["E", "3. Trabajos realizados por la empresa para su activo", [["", "73"]]],
+  ["E", "4. Aprovisionamientos", [["a) Consumo de mercaderías", "600 606 608 609 610"], ["b) Consumo de materias primas y otras materias consumibles", "601 602 6061 6062 6081 6082 6091 6092 611 612"], ["c) Trabajos realizados por otras empresas", "607"], ["d) Deterioro de mercaderías y materias primas", "6931 6932 6933 7931 7932 7933"]]],
+  ["E", "5. Otros ingresos de explotación", [["a) Ingresos accesorios y otros de gestión corriente", "75"], ["b) Subvenciones de explotación incorporadas al resultado", "74"]]],
+  ["E", "6. Gastos de personal", [["a) Sueldos, salarios y asimilados", "640 641 6450"], ["b) Cargas sociales", "642 643 649"], ["c) Provisiones", "644 6457 7950 7957"]]],
+  ["E", "7. Otros gastos de explotación", [["a) Servicios exteriores", "62"], ["b) Tributos", "631 634 636 639"], ["c) Pérdidas, deterioro y variación de provisiones comerciales", "650 694 695 794 7954"], ["d) Otros gastos de gestión corriente", "65"]]],
+  ["E", "8. Amortización del inmovilizado", [["", "68"]]],
+  ["E", "9. Imputación de subvenciones de inmovilizado no financiero y otras", [["", "746"]]],
+  ["E", "10. Excesos de provisiones", [["", "7951 7952 7955 7956"]]],
+  ["E", "11. Deterioro y resultado por enajenaciones del inmovilizado", [["a) Deterioros y pérdidas", "690 691 692 790 791 792"], ["b) Resultados por enajenaciones y otras", "670 671 672 770 771 772"]]],
+  ["E", "Otros resultados", [["", "678 778"]]],
+  ["F", "12. Ingresos financieros", [["a) De participaciones en instrumentos de patrimonio", "760"], ["b) De valores negociables y otros", "76"]]],
+  ["F", "13. Gastos financieros", [["", "66"]]],
+  ["F", "14. Variación de valor razonable en instrumentos financieros", [["", "663 763"]]],
+  ["F", "15. Diferencias de cambio", [["", "668 768"]]],
+  ["F", "16. Deterioro y resultado por enajenaciones de instrumentos financieros", [["", "666 667 673 675 696 697 698 699 766 773 775 796 797 798 799"]]],
+  ["I", "17. Impuestos sobre beneficios", [["", "630 633 638"]]]
+];
+const nombre3 = c => nombreMaestro(c) || (S.d.cuentas.find(x => x.codigo.startsWith(c) && x.codigo.length === 9) || {}).nombre || c;
+const par = (a, b, t, n, extra) => ({ t, a: r2(a), b: r2(b), n, ...extra });
+function saldosInforme(hasta, desde) { const M = new Map(), ej = +hasta.slice(0, 4); apuntesHasta(S.d, hasta).forEach(p => { if (/^[67]/.test(p.cuenta) && (p.a.ejercicio !== ej || (desde && p.a.fecha < desde))) return; const c = p.cuenta; M.set(c, r2((M.get(c) || 0) + +p.debe - +p.haber)); }); return M; }
+function infPyG(h, ha) {
+  const reglas = PYGN.flatMap(([g, e, subs], i) => subs.map(([s, pref], j) => [i + "|" + j, pref])), acum = (hasta) => { const M = new Map(); saldosInforme(hasta).forEach((v, c) => { if (!/^[67]/.test(c)) return; const k = epigrafe(c, reglas) || (PYGN.findIndex(x => x[1] === "Otros resultados") + "|0"), c3 = k + "|" + c.slice(0, 3); M.set(c3, r2((M.get(c3) || 0) - v)); }); return M; };
+  const A = acum(h), B = acum(ha), claves = [...new Set([...A.keys(), ...B.keys()])].sort(), out = [], tot = { E: [0, 0], F: [0, 0], I: [0, 0] };
+  const bloque = g => PYGN.forEach(([gr, ep, subs], i) => { if (gr !== g) return; const ks = claves.filter(k => +k.split("|")[0] === i); if (!ks.length) return; const suma = (L, M) => L.reduce((s, k) => s + (M.get(k) || 0), 0); tot[g][0] += suma(ks, A); tot[g][1] += suma(ks, B); out.push(par(suma(ks, A), suma(ks, B), ep, 1));
+    subs.forEach(([s], j) => { const kj = ks.filter(k => +k.split("|")[1] === j); if (!kj.length) return; if (s) out.push(par(suma(kj, A), suma(kj, B), s, 2)); kj.forEach(k => { const c = k.split("|")[2]; out.push(par(A.get(k) || 0, B.get(k) || 0, nombre3(c), 3, { c })); }); }); });
+  bloque("E"); out.push(par(tot.E[0], tot.E[1], "A) RESULTADO DE EXPLOTACIÓN", 0)); bloque("F"); out.push(par(tot.F[0], tot.F[1], "B) RESULTADO FINANCIERO", 0), par(tot.E[0] + tot.F[0], tot.E[1] + tot.F[1], "C) RESULTADO ANTES DE IMPUESTOS", 0)); bloque("I"); out.push(par(tot.E[0] + tot.F[0] + tot.I[0], tot.E[1] + tot.F[1] + tot.I[1], "D) RESULTADO DEL EJERCICIO", 0));
+  return out;
 }
+function infBalance(h, ha) {
+  const reglas = BAL.flatMap(([lado, g, L]) => L.map(([n, pref]) => [lado + "|" + g + "|" + n, pref]));
+  const acum = hasta => { const M = new Map(), ej = +hasta.slice(0, 4); apuntesHasta(S.d, hasta).forEach(p => { const res = /^[67]/.test(p.cuenta), c = res && p.a.ejercicio < ej ? "120000000" : p.cuenta; M.set(c, r2((M.get(c) || 0) + +p.debe - +p.haber)); }); const R = new Map();
+    M.forEach((v, c) => { const res = /^[67]/.test(c); let k = res ? "P|A) Patrimonio neto|VII. Resultado del ejercicio" : epigrafe(c, reglas); if (!k) k = v > 0 ? "A|B) Activo corriente|Otras partidas deudoras" : "P|C) Pasivo corriente|Otras partidas acreedoras"; const kc = k + "|" + (res ? "129" : c.slice(0, 3)); R.set(kc, r2((R.get(kc) || 0) + (k[0] === "A" ? v : -v))); }); return R; };
+  const A = acum(h), B = acum(ha), claves = [...new Set([...A.keys(), ...B.keys()])].sort(), out = [], suma = (L, M) => L.reduce((s, k) => s + (M.get(k) || 0), 0);
+  [["A", "TOTAL ACTIVO"], ["P", "TOTAL PATRIMONIO NETO Y PASIVO"]].forEach(([lado, tit]) => {
+    BAL.filter(x => x[0] === lado).forEach(([, g, L]) => { const kg = claves.filter(k => k.startsWith(lado + "|" + g + "|")); out.push(par(suma(kg, A), suma(kg, B), g, 1)); L.forEach(([n]) => { const kn = kg.filter(k => k.split("|")[2] === n); if (!kn.some(k => A.get(k) || B.get(k))) return; out.push(par(suma(kn, A), suma(kn, B), n, 2)); kn.forEach(k => { const c = k.split("|")[3]; if (A.get(k) || B.get(k)) out.push(par(A.get(k) || 0, B.get(k) || 0, c === "129" ? "Resultado del ejercicio" : nombre3(c), 3, { c })); }); }); });
+    const kt = claves.filter(k => k[0] === lado); out.push(par(suma(kt, A), suma(kt, B), tit, 0)); });
+  return out;
+}
+function infComprobacion(h, ha) { const A = saldosInforme(h), B = saldosInforme(ha), cs = [...new Set([...A.keys(), ...B.keys()])].sort(), M = new Map(); cs.forEach(c => { const c3 = c.slice(0, 3), r = M.get(c3) || [0, 0, []]; r[0] += A.get(c) || 0; r[1] += B.get(c) || 0; r[2].push(par(A.get(c) || 0, B.get(c) || 0, nombreCuenta(c) || c, 3, { c })); M.set(c3, r); });
+  const out = [...M].flatMap(([c3, [a, b, det]]) => [par(a, b, nombre3(c3), 1, { c: c3 }), ...det]); out.push(par(cs.reduce((s, c) => s + (A.get(c) || 0), 0), cs.reduce((s, c) => s + (B.get(c) || 0), 0), "SUMA (debe ser 0)", 0)); return out; }
+function infPresupuesto(h) { const ej = +h.slice(0, 4), M = saldosInforme(h), P = CF("presupuestos").filter(x => x.ej === ej).sort((a, b) => a.cuenta.localeCompare(b.cuenta));
+  return P.map(x => { const s = [...M].filter(([c]) => c.startsWith(x.cuenta)).reduce((t, [, v]) => t + v, 0); return par(x.cuenta.startsWith("7") ? -s : s, x.importe, nombreMaestro(x.cuenta) || nombreCuenta(x.cuenta) || x.cuenta, 1, { c: x.cuenta }); }); }
+function infRatios(h, ha) { const R = hasta => { const B = calcBalance(S.d, hasta), P = calcPyG(S.d, hasta), s = (pref) => [...B].filter(([k]) => k.startsWith(pref)).reduce((t, [, v]) => t + v, 0), ac = s("A|B)"), pc = s("P|C)"), exist = s("A|B) Activo corriente|II."), ef = s("A|B) Activo corriente|VII."), pn = s("P|A)"), at = s("A|"), cn = P.V.get("1. Importe neto de la cifra de negocios") || 0, d = (x, y) => y ? r2(x / y) : 0;
+    return [["Fondo de maniobra (activo corriente − pasivo corriente)", ac - pc], ["Liquidez general (activo corriente / pasivo corriente)", d(ac, pc)], ["Prueba ácida (sin existencias)", d(ac - exist, pc)], ["Tesorería (efectivo / pasivo corriente)", d(ef, pc)], ["Endeudamiento (pasivo / patrimonio neto)", d(at - pn, pn)], ["Autonomía (patrimonio neto / activo total)", d(pn, at)], ["Margen de explotación sobre ventas (%)", d(P.E * 100, cn)], ["Margen neto sobre ventas (%)", d(P.res * 100, cn)], ["Rentabilidad económica (resultado de explotación / activo, %)", d(P.E * 100, at)], ["Rentabilidad financiera (resultado / patrimonio neto, %)", d(P.res * 100, pn)]]; };
+  const A = R(h), B = R(ha); return A.map(([t, v], i) => par(v, B[i][1], t, 1)); }
+const INFORMES = [
+  { g: "Cuentas normalizadas", id: "pygnor", n: "PYG normalizado", f: infPyG, per: true }, { g: "Cuentas normalizadas", id: "balnor", n: "Balance de situación normalizado", f: infBalance },
+  { g: "Gestión", id: "comprob", n: "Saldo de comprobación", f: infComprobacion }, { g: "Gestión", id: "presu", n: "Real frente a presupuesto", f: infPresupuesto, cab: ["Real", "Presupuesto"] }, { g: "Gestión", id: "ratios", n: "Ratios", f: infRatios, per: true }
+];
+function generarInforme(def, h) {
+  const ha = (+h.slice(0, 4) - 1) + (h.slice(4) === "-02-29" ? "-02-28" : h.slice(4)), fmt = f => f.slice(8) + "/" + f.slice(5, 7) + "/" + f.slice(0, 4), rango = f => def.per ? "01/01/" + f.slice(0, 4) + " - " + fmt(f) : "a " + fmt(f);
+  return { id: uid(), tipo: def.id, fecha: h, generado: new Date().toISOString(), por: S.usuario || "", cab: def.cab || ["Ejercicio actual " + rango(h), "Ejercicio anterior " + rango(ha)], filas: def.f(h, ha) };
+}
+const importeInf = v => v < 0 ? "(" + eur(-v) + ")" : eur(v);
+const filasNivel = (G, nivel) => G.filas.filter(r => r.n <= nivel || (G.tipo === "ratios" || G.tipo === "presu"));
 V.financieros = () => {
-  const t = S.finTipo || "bal", h = rangoGL().h, y = +h.slice(0, 4), F = filasFinancieros();
-  const filas = F.map(([n, a, b, k]) => `<tr class="${k === "l" ? "" : "tot"}"><td style="${k === "l" ? "padding-left:2rem" : ""}">${n}</td><td class="n">${a === null ? "" : eur(a)}</td><td class="n">${b === null ? "" : eur(b)}</td></tr>`).join("");
-  return pagina("Informes financieros", btn("fincsv", "Exportar CSV") + btn("imprimir", "Imprimir"), `<div class="card"><b>${esc(S.emp.nombre)}</b> · ${t === "bal" ? "Balance de situación a " + h : "Cuenta de pérdidas y ganancias hasta " + h}</div>${tablaGL(["Epígrafe", "#" + y, "#" + (y - 1)], filas)}<p style="color:var(--tx2)">Modelo abreviado según los prefijos del PGC. Es un informe de gestión: revise la clasificación antes de usarlo en cuentas anuales.</p>`,
-    { tabs: ["Informe"], filtros: `<label>Informe<select id="fin-tipo"><option value="bal" ${t === "bal" ? "selected" : ""}>Balance de situación</option><option value="pyg" ${t === "pyg" ? "selected" : ""}>Pérdidas y ganancias</option></select></label><label>A fecha<input type="date" id="gl-hasta" value="${h}"></label>` });
+  const def = INFORMES.find(x => x.id === S.infDef) || INFORMES[0], hechos = CF("informesGen").filter(x => x.tipo === def.id).sort((a, b) => b.generado.localeCompare(a.generado)), ver = hechos.find(x => x.id === S.infVer), nivel = +(S.infNivel || 3), h = S.infFecha || (S.ej === +hoy().slice(0, 4) ? hoy() : S.ej + "-12-31");
+  const arbol = [...new Set(INFORMES.map(x => x.g))].map(g => `<div class="inf-g">▾ ${g}</div>${INFORMES.filter(x => x.g === g).map(x => `<a class="per ${x.id === def.id ? "sel" : ""}" data-a="infdef" data-id="${x.id}">${x.n}</a>`).join("")}`).join("");
+  let cuerpo;
+  if (ver) {
+    const F = filasNivel(ver, nivel);
+    cuerpo = `<div class="doc informe"><b><u>${esc(S.emp.nombre.toUpperCase())}</u></b><h2>${esc(def.n.toUpperCase())}</h2><table><tr><th>Descripción</th><th class="n">${esc(ver.cab[0])}</th><th class="n">${esc(ver.cab[1])}</th></tr>${F.map(r => `<tr class="inf-n${r.n}"><td>${esc(r.t)}${ver.tipo === "comprob" && r.c ? " (" + r.c + ")" : ""}</td><td class="n">${importeInf(r.a)}</td><td class="n">${importeInf(r.b)}</td></tr>`).join("") || `<tr><td colspan="3">Sin datos.</td></tr>`}</table></div>`;
+  } else cuerpo = `<div class="card"><div class="row"><label>Fecha del informe<br><input type="date" id="inf-fecha" value="${h}"></label><button class="p" data-a="infgenerar">Generar</button></div></div><b>Informes</b>${tablaGL(["Fecha del informe", "Fecha generada", "Generado por", ""], hechos.map(x => `<tr><td><a data-a="infver" data-id="${x.id}">${x.fecha}</a></td><td>${x.generado.slice(0, 10)} ${x.generado.slice(11, 16)}</td><td>${esc(x.por || "")}</td><td><button class="d" data-a="infborrar" data-id="${x.id}">✕</button></td></tr>`).join(""), "Todavía no se ha generado este informe. Elija la fecha y pulse Generar.")}`;
+  const acc = ver ? btn("infvolver", "← Informes") + btn("infpdf", "Exportar PDF") + btn("infcsv", "Exportar CSV") + btn("imprimir", "Imprimir") : `<button data-a="infgenerar">Generar</button>`;
+  return pagina("Informes financieros", acc, `<div class="cal"><div class="cal-per">${arbol}</div><div class="cal-det">${cuerpo}${ver ? "" : `<p style="color:var(--tx2)">Cada informe generado guarda las cifras de ese momento. Los modelos siguen los prefijos del PGC: revise la clasificación antes de usarlos en cuentas anuales.</p>`}</div></div>`,
+    { tabs: ["Informe"], vista: def.n, filtros: ver ? `<label>Mostrar<select id="inf-nivel">${[["1", "Epígrafes"], ["2", "Subepígrafes"], ["3", "Detalle por cuentas"]].map(([v, n]) => `<option value="${v}" ${+v === nivel ? "selected" : ""}>${n}</option>`).join("")}</select></label>` : "" });
 };
+async function accionInf(a, b) {
+  const id = b.dataset.id, G = () => CF("informesGen").find(x => x.id === S.infVer);
+  switch (a) {
+    case "infdef": S.infDef = id; S.infVer = null; render(); return true;
+    case "infver": S.infVer = id; render(); return true;
+    case "infvolver": S.infVer = null; render(); return true;
+    case "infgenerar": { const def = INFORMES.find(x => x.id === S.infDef) || INFORMES[0], h = (document.getElementById("inf-fecha") || {}).value || S.infFecha || hoy(); if (sb && !S.usuario) { const r = await sb.auth.getUser(); S.usuario = ((r.data || {}).user || {}).email || ""; }
+      const g = generarInforme(def, h), otros = CF("informesGen"), propios = otros.filter(x => x.tipo === def.id).slice(-9); await guardarCfg("informesGen", [...otros.filter(x => x.tipo !== def.id), ...propios, g]); S.infDef = def.id; S.infVer = g.id; render(); return true; }
+    case "infborrar": if (confirm("¿Eliminar ese informe generado?")) { await guardarCfg("informesGen", CF("informesGen").filter(x => x.id !== id)); render(); } return true;
+    case "infcsv": { const g = G(); if (g) descargarCSV(g.tipo + "_" + g.fecha + ".csv", [["Descripción", "Cuenta", ...g.cab], ...filasNivel(g, +(S.infNivel || 3)).map(r => [r.t, r.c || "", nCSV(r.a), nCSV(r.b)])]); return true; }
+    case "infpdf": { const g = G(); if (!g) return true; const def = INFORMES.find(x => x.id === g.tipo), F = filasNivel(g, +(S.infNivel || 3));
+      await bajarPDF(g.tipo + "_" + g.fecha, (doc, tabla) => { doc.setFont("helvetica", "bold").setFontSize(11).text(S.emp.nombre.toUpperCase(), 14, 16); doc.setFontSize(15).text(def.n.toUpperCase(), 14, 24);
+        tabla(doc, { startY: 29, head: [["Descripción", ...g.cab]], body: F.map(r => [{ content: r.t, styles: { cellPadding: { left: r.n === 3 ? 7 : r.n === 2 ? 4 : 1, top: .7, bottom: .7, right: 1 } } }, importeInf(r.a), importeInf(r.b)]), theme: "plain", styles: { fontSize: 8.5, cellPadding: .8 }, headStyles: { fontStyle: "bold", lineWidth: { bottom: .4 }, lineColor: 0 }, margin: { left: 14, right: 14, bottom: 16 }, columnStyles: { 1: { halign: "right", cellWidth: 38 }, 2: { halign: "right", cellWidth: 38 } },
+          didParseCell: c => { if (c.section === "head" && c.column.index) c.cell.styles.halign = "right"; if (c.section !== "body") return; const r = F[c.row.index]; if (r.n < 2) c.cell.styles.fontStyle = "bold"; if (r.n === 2) c.cell.styles.fontStyle = "bolditalic"; } }); }); return true; }
+  }
+  return false;
+}
 function datosSaldos() {
   const { d, h } = rangoGL(), nivel = +(S.glNivel || 9), M = new Map();
   apuntesHasta(S.d, h).forEach(p => { const c = p.cuenta.slice(0, nivel), r = M.get(c) || [0, 0, 0]; if (p.a.fecha < d || p.a.origen === "apertura") r[0] = r2(r[0] + +p.debe - +p.haber); else { r[1] = r2(r[1] + +p.debe); r[2] = r2(r[2] + +p.haber); } M.set(c, r); });
@@ -2772,7 +2905,6 @@ V.pmp = () => {
 async function accionGL(a, b) {
   const id = b.dataset.id, val = i => (document.getElementById(i) || {}).value || "";
   switch (a) {
-    case "fincsv": descargarCSV((S.finTipo === "pyg" ? "pyg_" : "balance_") + rangoGL().h + ".csv", [["Epígrafe", "Actual", "Anterior"], ...filasFinancieros().map(([n, x, y]) => [n, x === null ? "" : nCSV(x), y === null ? "" : nCSV(y)])]); return true;
     case "saldoscsv": descargarCSV("saldo_comprobacion_" + rangoGL().h + ".csv", [["Cuenta", "Nombre", "Saldo inicial", "Débito", "Crédito", "Saldo final"], ...datosSaldos().map(r => [r[0], r[1], ...r.slice(2).map(nCSV)])]); return true;
     case "vercuenta": S.glCta = id; S.vista = "extctas"; render(); return true;
     case "extctacsv": { const out = [["Cuenta", "Fecha", "Asiento", "Descripción", "Débito", "Crédito", "Saldo"]]; for (const [c, r] of datosExtractoCta()) { let s = r.ini; out.push([c, "", "", "Saldo inicial", "", "", nCSV(s)]); r.L.forEach(p => { s = r2(s + +p.debe - +p.haber); out.push([c, p.a.fecha, asNum(p.a), p.concepto || p.a.concepto || "", nCSV(p.debe), nCSV(p.haber), nCSV(s)]); }); } descargarCSV("extracto_cuentas_" + rangoGL().h + ".csv", out); return true; }
@@ -3130,7 +3262,7 @@ function comprobacionesCierre(mes) {
   return T;
 }
 V.espaciocierre = () => {
-  const mes = S.ecMes || hoy().slice(0, 7), C = comprobacionesCierre(mes), M = CF("tareasCierre"), H = new Set(CF("tareasHechas")[mes] || []), cerrado = (CF("cerrados") || []).includes(mes), pend = C.filter(c => c.n).length + M.filter(t => !H.has(t.id)).length;
+  const mes = S.ecMes || hoy().slice(0, 7), C = comprobacionesCierre(mes), M = CF("tareasCierre"), H = new Set(CF("tareasHechas")[mes] || []), cerrado = periodoCerrado(mes + "-01"), pend = C.filter(c => c.n).length + M.filter(t => !H.has(t.id)).length;
   return pagina("Espacio de trabajo de cierre del periodo", btn("vista", "Calendario del libro mayor", 'data-v="calendario"'), `<div class="card"><b class="${pend ? "ko" : "ok"}">${pend ? pend + " tarea(s) pendiente(s)" : "Todo listo para cerrar"}</b> · periodo ${mes} · ${cerrado ? "cerrado" : "abierto"}</div>
     ${tablaGL(["Comprobación automática", "#Pendientes", "Estado", ""], C.map(c => `<tr><td>${c.txt}</td><td class="n">${c.n || ""}</td><td class="${c.n ? "ko" : "ok"}">${c.n ? "Pendiente" : "Correcto"}</td><td><button data-a="vista" data-v="${c.v}">Ir</button></td></tr>`).join(""))}
     <h3 style="margin-top:1rem">Tareas propias</h3><div class="card"><div class="row"><label>Nueva tarea<br><input id="tc-nombre" size="40" placeholder="p. ej. Conciliar cuentas de personal"></label><button data-a="addtarea">+ Agregar</button></div></div>
@@ -3314,6 +3446,11 @@ document.addEventListener("change", async e => {
     if (await cambioAlb(t)) return;
     if (cambioTA(t)) return;
     if (await cambioG2(t)) return;
+    if (t.id === "inf-nivel") { S.infNivel = t.value; render(); return; }
+    if (t.id === "inf-fecha") { S.infFecha = t.value; return; }
+    if (t.dataset.calemp !== undefined) { if (t.checked) S.calEmps.add(t.dataset.calemp); else S.calEmps.delete(t.dataset.calemp); render(); return; }
+    if (t.id === "cal-nota") { const k = S.calP || S.ej + "-" + hoy().slice(5, 7), C = { ...CF("calendario") }; C[k] = { ...(C[k] || {}), nota: t.value.trim() }; await guardarCfg("calendario", C); return; }
+    if (["cal-estado", "cal-mod", "cal-acc"].includes(t.id)) { S[{ "cal-estado": "calEstado", "cal-mod": "calMod", "cal-acc": "calAcc" }[t.id]] = t.value; return; }
     if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
     else if (t.dataset.tf !== undefined) {
       setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.value);
@@ -3328,9 +3465,9 @@ document.addEventListener("change", async e => {
     else if (t.id === "emp") {
       const e2 = S.empresas.find(x => x.id === t.value);
       try { if (e2.almacen === "drive") await abrirDrive(e2.reg); } catch (err) { render(); throw err; }
-      S.emp = e2; S.libro = null; S.djAbierto = null; S.efSel = null; S.extracto = null; S.concilMarcas = null; S.bancoSel = ""; S.revSaldos = null; S.lcCta = ""; S.lcMarcas = null; S.ocSel = null; S.impTexto = ""; S.taTer = ""; S.taMarcas = null; S.taImp = {}; S.albForm = null; S.albMarcas = null; S.selAlb = null; S.glCta = ""; S.asgDest = null; S.asgForm = null; S.selTA = null; S.consol = null; S.dimId = ""; S.fsMarcas = null; S.selFS = null; S.ped = null; S.liqMarcas = null; S.selCred = null; S.selPed = null; await recargar();
+      S.emp = e2; S.libro = null; S.djAbierto = null; S.efSel = null; S.extracto = null; S.concilMarcas = null; S.bancoSel = ""; S.calOtros = null; S.calEmps = null; S.calP = ""; S.infVer = null; S.infFecha = ""; S.revSaldos = null; S.lcCta = ""; S.lcMarcas = null; S.ocSel = null; S.impTexto = ""; S.taTer = ""; S.taMarcas = null; S.taImp = {}; S.albForm = null; S.albMarcas = null; S.selAlb = null; S.glCta = ""; S.asgDest = null; S.asgForm = null; S.selTA = null; S.consol = null; S.dimId = ""; S.fsMarcas = null; S.selFS = null; S.ped = null; S.liqMarcas = null; S.selCred = null; S.selPed = null; await recargar();
     }
-    else if (t.id === "ej") { S.ej = +t.value; S.glDesde = ""; S.glHasta = ""; render(); }
+    else if (t.id === "ej") { S.ej = +t.value; S.glDesde = ""; S.glHasta = ""; S.calP = ""; S.infFecha = ""; S.infVer = null; render(); }
     else if (t.id === "cm") { S.filtroCta = t.value; render(); }
     else if (t.id === "fp") { S.filtroPend = t.value; render(); }
     else if (t.id === "fc") { S.filtroCuentas = t.value; render(); }
@@ -3427,6 +3564,7 @@ document.addEventListener("click", async e => {
     if (await accionAlb(a, b)) return;
     if (await accionTA(a, b)) return;
     if (await accionG2(a, b)) return;
+    if (await accionInf(a, b)) return;
     if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; S.ped = null; S.artEdit = null; S.almEdit = null; S.ajuste = null; S.cfgEdit = null; S.afEdit = null; S.bajaAF = false; S.djAbierto = null; S.efSel = null; S.albForm = null; S.albMarcas = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
     else if (a === "nav") { S.nav = !S.nav; if (S.nav) S.navMod = moduloDe(S.vista) || S.navMod; render(); }
     else if (a === "navmod") { S.navMod = b.dataset.id; render(); }
