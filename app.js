@@ -31,7 +31,7 @@ const PGC = [
   ["4752","H.P. acreedora por Impuesto sobre Sociedades"],["4771","H.P. recargo de equivalencia"],["4773","H.P. IVA repercutido intracomunitario"],
   ["310","Materias primas"],["320","Elementos y conjuntos incorporables"],["350","Productos terminados"],["610","Variación de existencias de mercaderías"],["611","Variación de existencias de materias primas"],["612","Variación de existencias de otros aprovisionamientos"],["712","Variación de existencias de productos terminados"],
   ["218","Elementos de transporte"],["280","Amortización acumulada del inmovilizado intangible"],["2806","Amortización acumulada de aplicaciones informáticas"],["2811","Amortización acumulada de construcciones"],["2813","Amortización acumulada de maquinaria"],["2816","Amortización acumulada de mobiliario"],["2817","Amortización acumulada de equipos informáticos"],["2818","Amortización acumulada de elementos de transporte"],["671","Pérdidas procedentes del inmovilizado material"],["680","Amortización del inmovilizado intangible"],
-  ["401","Proveedores, efectos comerciales a pagar"],["431","Clientes, efectos comerciales a cobrar"],["543","Créditos a corto plazo por enajenación de inmovilizado"],["665","Intereses por descuento de efectos"],["771","Beneficios procedentes del inmovilizado material"],
+  ["401","Proveedores, efectos comerciales a pagar"],["431","Clientes, efectos comerciales a cobrar"],["543","Créditos a corto plazo por enajenación de inmovilizado"],["665","Intereses por descuento de efectos"],["771","Beneficios procedentes del inmovilizado material"],["769","Otros ingresos financieros"],
   ["555","Partidas pendientes de aplicación"],["602","Compras de otros aprovisionamientos"],["606","Descuentos sobre compras por pronto pago"],["609","Rappels por compras"]
 ];
 
@@ -249,14 +249,14 @@ const NAV = [
   { g: "Cuentas a cobrar", sec: [
     { n: "Clientes", it: [["clientes", "Todos los clientes"]] },
     { n: "Facturas y cobros", sub: [{ n: "Facturas", it: [["fventa", "Facturas de cliente"], ["diariofcli", "Diario de facturas de cliente"]] }, { n: "Cobros", it: [["cobros", "Cobros pendientes"]] }] },
-    { n: "Cobros y efectos", it: [["dcobro", "Diario de pagos de clientes"], ["dletra", "Diario de creación de letras de cambio"], ["cartera", "Cartera de efectos"], ["remesas", "Remesas"]] },
+    { n: "Pagos", it: [["dcobro", "Diario de pagos de clientes"]], sub: [{ n: "Letra de cambio", it: [["dletra", "Diario de creación de letras de cambio"], ["dletraimp", "Diario de impago de letras de cambio"], ["dletraren", "Diario de renegociación de letras de cambio"], ["dletraliq", "Diario de liquidación de letra de cambio"], ["cartera", "Cartera de efectos"], ["remesas", "Remesas"]] }] },
     { n: "Consultas e informes", it: [["antcli", "Antigüedad de saldos de clientes"], ["extcli", "Extracto de cuenta de cliente"]] },
     { n: "Documentos y crédito", it: [["rectif", "Facturas rectificativas"], ["liquidar", "Liquidar transacciones"], ["imprfact", "Imprimir facturas"], ["credito", "Crédito y cobros"]] },
     { n: "Configurar", it: [["parcli", "Parámetros de clientes"]] }] },
   { g: "Cuentas a pagar", sec: [
     { n: "Proveedores", it: [["proveedores", "Todos los proveedores"]] },
     { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"], ["diariofprov", "Diario de facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] },
-    { n: "Pagos y efectos", it: [["dpago", "Diario de pagos a proveedores"], ["dpagare", "Diario de creación de pagarés"], ["cartera", "Cartera de efectos"]] },
+    { n: "Pagos", it: [["dpago", "Diario de pagos a proveedores"]], sub: [{ n: "Pagarés", it: [["dpagare", "Diario de creación de pagarés"], ["dpagren", "Diario de renegociación de pagarés"], ["dpagliq", "Diario de liquidación de pagarés"], ["cartera", "Cartera de efectos"]] }] },
     { n: "Consultas e informes", it: [["antprov", "Antigüedad de saldos de proveedores"], ["extprov", "Extracto de cuenta de proveedor"]] },
     { n: "Documentos", it: [["rectif", "Facturas rectificativas"], ["liquidar", "Liquidar transacciones"]] },
     { n: "Configurar", it: [["parprov", "Parámetros de proveedores"]] }] },
@@ -287,7 +287,7 @@ const NAV = [
 ];
 const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes", regexist: "Regularización de existencias", cierre: "Cierre del ejercicio", bancos: "Cuentas bancarias", movbanco: "Transacciones bancarias", conciliar: "Conciliación bancaria", activos: "Activos fijos", amort: "Propuesta de amortización", grupoact: "Grupos de activos fijos", dpago: "Diario de pagos a proveedores", dcobro: "Diario de pagos de clientes", dpagare: "Diario de creación de pagarés", dletra: "Diario de creación de letras de cambio", cartera: "Cartera de efectos", remesas: "Remesas", extractos: "Extractos bancarios", transfer: "Transferencias bancarias", prevision: "Previsión de flujo de efectivo", antcli: "Antigüedad de saldos de clientes", antprov: "Antigüedad de saldos de proveedores", extcli: "Extracto de cuenta de cliente", extprov: "Extracto de cuenta de proveedor", periodicos: "Asientos periódicos", librodiario: "Libro diario", calendario: "Calendario del libro mayor", aftrans: "Transacciones de activos fijos", afcuadro: "Cuadro de amortización", rectif: "Facturas rectificativas", liquidar: "Liquidar transacciones", imprfact: "Imprimir facturas", credito: "Crédito y cobros", presupv: "Presupuestos de ventas", cotiz: "Solicitudes de cotización", empresa: "Datos de la empresa", presupuesto: "Control presupuestario" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes", regexist: "Regularización de existencias", cierre: "Cierre del ejercicio", bancos: "Cuentas bancarias", movbanco: "Transacciones bancarias", conciliar: "Conciliación bancaria", activos: "Activos fijos", amort: "Propuesta de amortización", grupoact: "Grupos de activos fijos", dpago: "Diario de pagos a proveedores", dcobro: "Diario de pagos de clientes", dpagare: "Diario de creación de pagarés", dletra: "Diario de creación de letras de cambio", cartera: "Cartera de efectos", remesas: "Remesas", extractos: "Extractos bancarios", transfer: "Transferencias bancarias", prevision: "Previsión de flujo de efectivo", antcli: "Antigüedad de saldos de clientes", antprov: "Antigüedad de saldos de proveedores", extcli: "Extracto de cuenta de cliente", extprov: "Extracto de cuenta de proveedor", periodicos: "Asientos periódicos", librodiario: "Libro diario", calendario: "Calendario del libro mayor", aftrans: "Transacciones de activos fijos", afcuadro: "Cuadro de amortización", dletraliq: "Diario de liquidación de letra de cambio", dletraimp: "Diario de impago de letras de cambio", dletraren: "Diario de renegociación de letras de cambio", dpagliq: "Diario de liquidación de pagarés", dpagren: "Diario de renegociación de pagarés", rectif: "Facturas rectificativas", liquidar: "Liquidar transacciones", imprfact: "Imprimir facturas", credito: "Crédito y cobros", presupv: "Presupuestos de ventas", cotiz: "Solicitudes de cotización", empresa: "Datos de la empresa", presupuesto: "Control presupuestario" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -1968,6 +1968,14 @@ const DJ = {
   pagare: { titulo: "Diario de creación de pagarés", lado: "C", ter: "P", pref: "CP", forma: "Pagaré", efecto: true },
   letra: { titulo: "Diario de creación de letras de cambio", lado: "V", ter: "C", pref: "CL", forma: "Letra de cambio", efecto: true }
 };
+const VIVOS = ["En cartera", "En gestión de cobro", "Descontado"];
+Object.assign(DJ, { // diarios que operan sobre efectos ya creados
+  letraliq: { titulo: "Diario de liquidación de letra de cambio", lado: "V", ter: "C", pref: "LL", op: "efcobrar", estados: VIVOS, efTab: "Letra" },
+  letraimp: { titulo: "Diario de impago de letras de cambio", lado: "V", ter: "C", pref: "IL", op: "efimpago", estados: VIVOS, efTab: "Letra" },
+  letraren: { titulo: "Diario de renegociación de letras de cambio", lado: "V", ter: "C", pref: "RL", op: "renegociar", estados: ["En cartera", "Impagado"], efTab: "Letra" },
+  pagliq: { titulo: "Diario de liquidación de pagarés", lado: "C", ter: "P", pref: "LP", op: "efcobrar", estados: ["Pendiente"], efTab: "Pagaré" },
+  pagren: { titulo: "Diario de renegociación de pagarés", lado: "C", ter: "P", pref: "RP", op: "renegociar", estados: ["Pendiente"], efTab: "Pagaré" }
+});
 const FORMAS_DJ = ["Transferencia", "Recibo domiciliado", "Confirming", "Cheque", "Efectivo", "Tarjeta"];
 const bancoDef = tipo => parm(DJ[tipo].lado === "V" ? "cli" : "prov", "cuentaTes", "") || (CF("bancos").find(b => b.cuenta) || {}).cuenta || cuentaSis("572");
 const dlCtas = () => `<datalist id="dl">${optsCuentas()}</datalist><datalist id="dlbancos">${[...new Set([...CF("bancos").map(b => b.cuenta).filter(Boolean), ...movs().filter(c => c.codigo.startsWith("57")).map(c => c.codigo)])].map(c => `<option value="${c}">${esc(nombreCuenta(c))}</option>`).join("")}</datalist>`;
@@ -1985,6 +1993,7 @@ function vistaDJ(tipo) {
     { tabs: ["Lista"], filtros: `<label>Mostrar<select id="dj-mostrar">${["No registrado", "Registrado", "Todo"].map(x => `<option ${x === mostrar ? "selected" : ""}>${x}</option>`).join("")}</select></label>` });
 }
 function vistaDJLineas(d) {
+  if (DJ[d.tipo].op) return vistaDJEfectos(d);
   const D = DJ[d.tipo], reg = !!d.registrado, dis = reg ? "disabled" : "", tab = S.tabs.djl || "Visión general", ef = D.efecto;
   const ters = S.d.terceros.filter(t => t.tipo === D.ter);
   const filas = d.lineas.map((l, i) => {
@@ -2005,8 +2014,10 @@ function vistaDJLineas(d) {
    <div class="lista"><table class="editable"><tr><th>Fecha</th><th>Cuenta</th><th>Nombre</th>${heads.map(h => `<th>${h}</th>`).join("")}<th>Asiento</th><th></th></tr>${filas || `<tr><td colspan="9" class="vacio">Sin líneas. Use "+ Línea" o la propuesta.</td></tr>`}</table></div><div class="pie"><span>Líneas <b>${d.lineas.length}</b></span><span>Total del diario <b>${eur(tot)}</b></span></div>`,
     { tabs: ["Visión general", "General", tabEf], tabKey: "djl", vista: d.num + " : " + d.nombre, filtros: reg ? "" : `<label>Propuesta: vencimientos hasta<input type="date" id="dj-hasta" value="${S.djHasta || hoy()}"></label>` });
 }
+V.dletraliq = () => vistaDJ("letraliq"); V.dletraimp = () => vistaDJ("letraimp"); V.dletraren = () => vistaDJ("letraren"); V.dpagliq = () => vistaDJ("pagliq"); V.dpagren = () => vistaDJ("pagren");
 V.dpago = () => vistaDJ("pago"); V.dcobro = () => vistaDJ("cobro"); V.dpagare = () => vistaDJ("pagare"); V.dletra = () => vistaDJ("letra");
 function validarDJ(d) {
+  if (DJ[d.tipo].op) return validarDJEfectos(d);
   const D = DJ[d.tipo], err = [], usado = new Map();
   if (!d.lineas.length) err.push("El diario no tiene líneas.");
   d.lineas.forEach((l, i) => {
@@ -2024,6 +2035,7 @@ function validarDJ(d) {
 }
 const efectos = () => CF("efectos").filter(e => hayAsiento(e.hist[0].asiento));
 async function registrarDJ(d) {
+  if (DJ[d.tipo].op) return registrarDJEfectos(d);
   const D = DJ[d.tipo], err = validarDJ(d); if (err.length) return alert("No se puede registrar:\n" + err.join("\n"));
   if (!confirm("¿Registrar el diario " + d.num + " (" + d.lineas.length + " líneas)?")) return;
   for (const [n, l] of d.lineas.entries()) {
@@ -2042,11 +2054,11 @@ async function registrarDJ(d) {
   d.registrado = hoy(); await guardarDJ(d); await recargar();
 }
 /* Cartera de efectos y remesas */
-const ESTADOS_EF = { C: ["En cartera", "En gestión de cobro", "Descontado", "Cobrado", "Impagado"], P: ["Pendiente", "Pagado"] };
+const ESTADOS_EF = { C: ["En cartera", "En gestión de cobro", "Descontado", "Cobrado", "Impagado", "Renegociado"], P: ["Pendiente", "Pagado", "Renegociado"] };
 function vistaCartera() {
   const tp = S.carteraTipo || "C", est = S.carteraEst || "", cli = tp === "C";
   const L = efectos().filter(e => e.tipo === tp && (!est || e.estado === est)).sort((a, b) => a.venc.localeCompare(b.venc)), sel = S.efSel || (S.efSel = new Set());
-  const filas = L.map(e => { const t = terPorId(e.tercero_id) || {}; return `<tr class="${e.venc < hoy() && !["Cobrado", "Pagado"].includes(e.estado) ? "ko" : ""}"><td><input type="checkbox" data-ef="${e.id}" ${sel.has(e.id) ? "checked" : ""}></td><td>${esc(e.numero)}</td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td><td>${esc(e.factura)}</td><td>${e.emision}</td><td>${e.venc}</td><td class="n">${eur(e.importe)}</td><td>${e.estado}</td></tr>`; }).join("");
+  const filas = L.map(e => { const t = terPorId(e.tercero_id) || {}; return `<tr class="${e.venc < hoy() && !["Cobrado", "Pagado", "Renegociado"].includes(e.estado) ? "ko" : ""}"><td><input type="checkbox" data-ef="${e.id}" ${sel.has(e.id) ? "checked" : ""}></td><td>${esc(e.numero)}</td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td><td>${esc(e.factura)}</td><td>${e.emision}</td><td>${e.venc}</td><td class="n">${eur(e.importe)}</td><td>${e.estado}</td></tr>`; }).join("");
   const marc = L.filter(e => sel.has(e.id)), todos = estados => marc.length && marc.every(e => estados.includes(e.estado));
   const acc = (cli ? btn("remcobro", "Remesar al cobro", "", !todos(["En cartera"])) + btn("remdesc", "Remesar al descuento", "", !todos(["En cartera"])) + SEP + btn("efcobrar", "Registrar cobro", "", !todos(["En cartera", "En gestión de cobro", "Descontado"])) + btn("efimpago", "Registrar impago", "", !todos(["En cartera", "En gestión de cobro", "Descontado"])) : btn("efcobrar", "Registrar pago", "", !todos(["Pendiente"]))) + SEP + btn("efdeshacer", "Deshacer última operación", "", !marc.length);
   return pagina("Cartera de efectos", acc, `${dlCtas()}<div class="card"><div class="row"><label>Fecha de la operación<br><input type="date" id="ef-fecha" value="${hoy()}"></label><label>Cuenta bancaria<br><input id="ef-banco" list="dlbancos" size="12" value="${bancoDef(cli ? "cobro" : "pago")}"></label>${cli ? `<label>Gastos bancarios<br><input id="ef-gastos" size="8"></label><label>Intereses de descuento<br><input id="ef-int" size="8"></label>` : ""}<span>Seleccionados: <b>${marc.length}</b> · <b>${eur(marc.reduce((s, e) => s + e.importe, 0))}</b></span></div></div>
@@ -2059,6 +2071,72 @@ V.remesas = () => {
   return pagina("Remesas", btn("remcsv", "Exportar remesa (CSV)", "", !sel), `<div class="pagina"><div class="lista"><table><tr><th>Remesa</th><th>Fecha</th><th>Tipo</th><th>Cuenta bancaria</th><th class="n">Efectos</th><th class="n">Importe</th></tr>${L.map(r => `<tr data-sel class="${sel && sel.id === r.id ? "sel" : ""}" data-a="selrem" data-id="${r.id}"><td>${r.num}</td><td>${r.fecha}</td><td>${r.tipo}</td><td>${r.banco}</td><td class="n">${r.efectos.length}</td><td class="n">${eur(r.importe)}</td></tr>`).join("") || `<tr><td colspan="6" class="vacio">Sin remesas. Se crean desde la cartera de efectos.</td></tr>`}</table></div>
    <aside class="factbox"><h3>Efectos de la remesa</h3>${sel ? `<dl>${sel.efectos.map(i => E.find(e => e.id === i)).filter(Boolean).map(e => `<dt>${esc(e.numero)} · ${e.venc}</dt><dd>${eur(e.importe)} · ${e.estado}</dd>`).join("")}</dl>` : `<p style="color:var(--tx2)">Seleccione una remesa.</p>`}</aside></div>`, { tabs: ["Lista"] });
 };
+function asientoEfecto(e, op, banco, gg = 0, ii = 0) { // apuntes de una operación sobre un efecto y estado en que queda
+  const ap = (cuenta, debe, haber) => ({ cuenta, concepto: null, debe: r2(debe), haber: r2(haber) });
+  const v = e.importe, orig = e.estado === "En gestión de cobro" ? EF.gest : e.estado === "Descontado" ? EF.desc : e.estado === "Impagado" ? EF.imp : EF.cart;
+  const gastos = () => gg ? [ap(EF.gastos, gg, 0), ap(banco, 0, gg)] : [];
+  if (op === "remcobro") return { L: [ap(EF.gest, v, 0), ap(EF.cart, 0, v), ...gastos()], estado: "En gestión de cobro", txt: "Remesa al cobro" };
+  if (op === "remdesc") return { L: [ap(banco, v - gg - ii, 0), ...(ii ? [ap(EF.int, ii, 0)] : []), ...(gg ? [ap(EF.gastos, gg, 0)] : []), ap(EF.deuda, 0, v), ap(EF.desc, v, 0), ap(EF.cart, 0, v)], estado: "Descontado", txt: "Remesa al descuento" };
+  if (op === "renegociar") { const extra = r2(gg + ii), nuevo = r2(v + extra);
+    return { nuevo, estado: "Renegociado", txt: "Renegociación de " + (e.tipo === "C" ? "letra" : "pagaré"), L: e.tipo === "C" ? [ap(EF.cart, nuevo, 0), ap(orig, 0, v), ...(extra ? [ap("769000001", 0, extra)] : [])] : [ap(EF.pagar, v, 0), ...(extra ? [ap("662000001", extra, 0)] : []), ap(EF.pagar, 0, nuevo)] }; }
+  if (op === "efcobrar" && e.tipo === "P") return { L: [ap(EF.pagar, v, 0), ap(banco, 0, v), ...gastos()], estado: "Pagado", txt: "Pago de pagaré" };
+  if (op === "efcobrar") return { L: [...(e.estado === "Descontado" ? [ap(EF.deuda, v, 0), ap(EF.desc, 0, v)] : [ap(banco, v, 0), ap(orig, 0, v)]), ...gastos()], estado: "Cobrado", txt: "Cobro de efecto" };
+  return { L: [...(e.estado === "Descontado" ? [ap(EF.deuda, v, 0), ap(banco, 0, v), ap(EF.imp, v, 0), ap(EF.desc, 0, v)] : [ap(EF.imp, v, 0), ap(orig, 0, v)]), ...gastos()], estado: "Impagado", txt: "Impago de efecto" };
+}
+
+/* Diarios de liquidación, impago y renegociación de efectos */
+function vistaDJEfectos(d) {
+  const D = DJ[d.tipo], reg = !!d.registrado, dis = reg ? "disabled" : "", tab = S.tabs.djl || "Visión general", ren = D.op === "renegociar", cli = D.ter === "C", E = efectos();
+  const heads = tab === "General" ? ["Descripción", "Referencia"] : tab === D.efTab ? ["Factura", "Emisión", "Vencimiento", "Estado del efecto"]
+    : ren ? ["Importe", "Nuevo vencimiento", "Nuevo n.º", "Gastos repercutidos", "Intereses", "Nuevo importe"] : ["Importe", D.op === "efimpago" ? "Gastos de devolución" : "Gastos bancarios", "Cuenta de contrapartida (banco)"];
+  const filas = d.lineas.map((l, i) => {
+    const e = CF("efectos").find(x => x.id === l.efecto_id), t = e ? terPorId(e.tercero_id) || {} : {};
+    const libres = E.filter(x => x.tipo === D.ter && (D.estados.includes(x.estado) || x.id === l.efecto_id));
+    const inp = (k, size, extra = "") => `<input data-dj="${i}" data-k="${k}" size="${size}" value="${esc(l[k] ?? "")}" ${extra} ${dis}>`;
+    const mid = tab === "General" ? `<td>${inp("desc", 40)}</td><td>${inp("referencia", 16)}</td>` : tab === D.efTab ? `<td>${esc(e ? e.factura : "")}</td><td>${e ? e.emision : ""}</td><td>${e ? e.venc : ""}</td><td>${e ? e.estado : ""}</td>`
+      : ren ? `<td class="n">${e ? eur(e.importe) : ""}</td><td><input type="date" data-dj="${i}" data-k="venc" value="${l.venc || ""}" ${dis}></td><td>${inp("numero", 14)}</td><td>${inp("gastos", 7)}</td><td>${inp("intereses", 7)}</td><td class="n">${e ? eur(e.importe + (+l.gastos || 0) + (+l.intereses || 0)) : ""}</td>`
+        : `<td class="n">${e ? eur(e.importe) : ""}</td><td>${inp("gastos", 8)}</td><td>${inp("banco", 10, 'list="dlbancos"')}</td>`;
+    return `<tr><td><input type="date" data-dj="${i}" data-k="fecha" value="${l.fecha || ""}" ${dis}></td><td><select data-dj="${i}" data-k="efecto_id" ${dis}>${optsHtml(libres.map(x => [x.id, x.numero + " · " + x.venc + " · " + eur(x.importe)]), l.efecto_id)}</select></td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td>${mid}<td>${l.asiento ? asNum(S.d.asientos.find(a => a.id === l.asiento)) : ""}</td><td>${reg ? "" : `<button class="d" data-a="deldjl" data-i="${i}">✕</button>`}</td></tr>`;
+  }).join("");
+  const tot = r2(d.lineas.reduce((s, l) => s + ((CF("efectos").find(x => x.id === l.efecto_id) || {}).importe || 0), 0));
+  return pagina(D.titulo, btn("volverdj", "← Diarios") + (reg ? "" : btn("adddjl", "+ Línea") + btn("propuesta", "Propuesta de efectos") + btn("validardj", "Validar") + `<button class="p" data-a="registrardj">Registrar</button>`),
+    `${dlCtas()}<div class="lista"><table class="editable"><tr><th>Fecha</th><th>${cli ? "Letra de cambio" : "Pagaré"}</th><th>Cuenta</th><th>Nombre</th>${heads.map(h => `<th>${h}</th>`).join("")}<th>Asiento</th><th></th></tr>${filas || `<tr><td colspan="${heads.length + 6}" class="vacio">Sin líneas. Use "+ Línea" o la propuesta.</td></tr>`}</table></div><div class="pie"><span>Líneas <b>${d.lineas.length}</b></span><span>Importe de los efectos <b>${eur(tot)}</b></span></div>`,
+    { tabs: ["Visión general", "General", D.efTab], tabKey: "djl", vista: d.num + " : " + d.nombre, filtros: reg ? "" : `<label>Propuesta: vencimientos hasta<input type="date" id="dj-hasta" value="${S.djHasta || hoy()}"></label>` });
+}
+const bancoNecesario = (op, e, gg) => gg > 0 && op !== "renegociar" || (op === "efcobrar" && e.estado !== "Descontado") || (op === "efimpago" && e.estado === "Descontado");
+function validarDJEfectos(d) {
+  const D = DJ[d.tipo], err = [], usados = new Set(), E = efectos();
+  if (!d.lineas.length) err.push("El diario no tiene líneas.");
+  d.lineas.forEach((l, i) => {
+    if (l.asiento && hayAsiento(l.asiento)) return;
+    const n = "Línea " + (i + 1) + ": ", e = E.find(x => x.id === l.efecto_id), gg = +l.gastos || 0;
+    if (!l.fecha) err.push(n + "falta la fecha.");
+    if (!e) return err.push(n + "elija el efecto.");
+    if (!D.estados.includes(e.estado)) err.push(n + "el efecto " + e.numero + " está «" + e.estado + "» y no admite esta operación.");
+    if (usados.has(e.id)) err.push(n + "el efecto " + e.numero + " está repetido."); usados.add(e.id);
+    if (gg < 0 || (+l.intereses || 0) < 0) err.push(n + "gastos e intereses no pueden ser negativos.");
+    if (D.op === "renegociar") { if (!l.venc) err.push(n + "falta el nuevo vencimiento."); else if (l.venc <= l.fecha) err.push(n + "el nuevo vencimiento debe ser posterior a la fecha."); }
+    else if (bancoNecesario(D.op, e, gg) && !(esMov(l.banco) && String(l.banco).startsWith("5"))) err.push(n + "indique la cuenta de tesorería (57…).");
+  });
+  return err;
+}
+async function registrarDJEfectos(d) {
+  const D = DJ[d.tipo], err = validarDJEfectos(d); if (err.length) return alert("No se puede registrar:\n" + err.join("\n"));
+  if (!confirm("¿Registrar el diario " + d.num + " (" + d.lineas.length + " líneas)?")) return;
+  for (const l of d.lineas) {
+    if (l.asiento && hayAsiento(l.asiento)) continue;
+    const e = efectos().find(x => x.id === l.efecto_id), R = asientoEfecto(e, D.op, l.banco, +l.gastos || 0, +l.intereses || 0);
+    for (const x of R.L) await asegurarCta(x.cuenta);
+    l.asiento = await db.crearAsiento(S.emp.id, l.fecha, R.txt + " " + e.numero + " " + ((terPorId(e.tercero_id) || {}).nombre || ""), R.L, "efecto", d.num);
+    await guardarDJ(d);
+    const paso = estado => ({ fecha: l.fecha, estado, asiento: l.asiento, asientos: [l.asiento] });
+    let lista = CF("efectos").map(x => x.id === e.id ? { ...e, estado: R.estado, hist: [...e.hist, paso(R.estado)] } : x);
+    if (D.op === "renegociar") { const ini = e.tipo === "C" ? "En cartera" : "Pendiente"; lista = [...lista, { ...e, id: uid(), origen: e.id, numero: l.numero || e.numero + "-R", importe: R.nuevo, emision: l.fecha, venc: l.venc, estado: ini, hist: [paso(ini)] }]; }
+    await guardarCfg("efectos", lista); S.d = await db.cargar(S.emp.id);
+  }
+  d.registrado = hoy(); await guardarDJ(d); await recargar();
+}
+
 async function operarEfectos(op) {
   const sel = efectos().filter(e => S.efSel.has(e.id)); if (!sel.length) return;
   const fecha = document.getElementById("ef-fecha").value, banco = document.getElementById("ef-banco").value.trim(), g = r2(num((document.getElementById("ef-gastos") || {}).value || 0)) || 0, int = r2(num((document.getElementById("ef-int") || {}).value || 0)) || 0;
@@ -2067,15 +2145,9 @@ async function operarEfectos(op) {
   if (usaBanco && !esMov(banco)) return alert("Indique la cuenta bancaria (9 dígitos).");
   if (!confirm("¿Registrar la operación sobre " + sel.length + " efecto(s) por " + eur(sel.reduce((s, e) => s + e.importe, 0)) + "?")) return;
   let primero = true; const total = r2(sel.reduce((s, e) => s + e.importe, 0)), cambios = new Map();
-  const ap = (cuenta, debe, haber) => ({ cuenta, concepto: null, debe: r2(debe), haber: r2(haber) });
   for (const e of sel) {
-    const v = e.importe, orig = e.estado === "En gestión de cobro" ? EF.gest : e.estado === "Descontado" ? EF.desc : EF.cart, gg = primero ? g : 0, ii = primero ? int : 0; primero = false;
-    let L = [], estado, txt;
-    if (op === "remcobro") { L = [ap(EF.gest, v, 0), ap(EF.cart, 0, v)]; estado = "En gestión de cobro"; txt = "Remesa al cobro"; if (gg) L.push(ap(EF.gastos, gg, 0), ap(banco, 0, gg)); }
-    else if (op === "remdesc") { L = [ap(banco, v - gg - ii, 0), ...(ii ? [ap(EF.int, ii, 0)] : []), ...(gg ? [ap(EF.gastos, gg, 0)] : []), ap(EF.deuda, 0, v), ap(EF.desc, v, 0), ap(EF.cart, 0, v)]; estado = "Descontado"; txt = "Remesa al descuento"; }
-    else if (op === "efcobrar" && e.tipo === "P") { L = [ap(EF.pagar, v, 0), ap(banco, 0, v)]; estado = "Pagado"; txt = "Pago de pagaré"; }
-    else if (op === "efcobrar") { L = e.estado === "Descontado" ? [ap(EF.deuda, v, 0), ap(EF.desc, 0, v)] : [ap(banco, v, 0), ap(orig, 0, v)]; estado = "Cobrado"; txt = "Cobro de efecto"; if (gg) L.push(ap(EF.gastos, gg, 0), ap(banco, 0, gg)); }
-    else { L = e.estado === "Descontado" ? [ap(EF.deuda, v, 0), ap(banco, 0, v), ap(EF.imp, v, 0), ap(EF.desc, 0, v)] : [ap(EF.imp, v, 0), ap(orig, 0, v)]; estado = "Impagado"; txt = "Impago de efecto"; if (gg) L.push(ap(EF.gastos, gg, 0), ap(banco, 0, gg)); }
+    const gg = primero ? g : 0, ii = primero ? int : 0; primero = false;
+    const { L, estado, txt } = asientoEfecto(e, op, banco, gg, ii);
     for (const x of L) await asegurarCta(x.cuenta);
     const aid = await db.crearAsiento(S.emp.id, fecha, txt + " " + e.numero + " " + ((terPorId(e.tercero_id) || {}).nombre || ""), L, "efecto", e.numero);
     cambios.set(e.id, { ...e, estado, hist: [...e.hist, { fecha, estado, asientos: [aid] }] });
@@ -2089,9 +2161,10 @@ async function deshacerEfectos() {
   for (const e of sel) {
     const ult = e.hist[e.hist.length - 1];
     for (const l of S.d.liquidaciones.filter(l => ult.asientos.includes(l.asiento_id))) await db.borrarLiquidacion(l.id);
-    for (const a of ult.asientos) if (hayAsiento(a)) await db.borrarAsiento(a);
-    if (e.hist.length === 1) await guardarCfg("efectos", CF("efectos").filter(x => x.id !== e.id));
-    else { const h = e.hist.slice(0, -1); await guardarCfg("efectos", CF("efectos").map(x => x.id === e.id ? { ...e, hist: h, estado: h[h.length - 1].estado } : x)); }
+    const A = ult.asientos;
+    if (CF("efectos").some(x => x.id !== e.id && A.includes(x.hist[0].asiento) && x.hist.length > 1)) { alert("El efecto nacido de la renegociación de " + e.numero + " ya tiene operaciones. Deshágalas antes."); continue; }
+    for (const a of A) if (hayAsiento(a)) await db.borrarAsiento(a);
+    await guardarCfg("efectos", CF("efectos").filter(x => !A.includes(x.hist[0].asiento)).map(x => { const u = x.hist[x.hist.length - 1]; if (x.hist.length < 2 || !u.asientos.some(a => A.includes(a))) return x; const h = x.hist.slice(0, -1); return { ...x, hist: h, estado: h[h.length - 1].estado }; }));
   }
   S.efSel = new Set(); await recargar();
 }
@@ -2208,10 +2281,13 @@ async function accionTes(a, b) {
     case "abrirdj": if (id || S.djSel) { S.djAbierto = id || S.djSel; S.tabs.djl = "Visión general"; render(); } return true;
     case "volverdj": S.djAbierto = null; render(); return true;
     case "deldj": { const d = CF("diariosPago").find(x => x.id === S.djSel); if (d && !d.registrado && !d.lineas.some(l => l.asiento && hayAsiento(l.asiento)) && confirm("¿Eliminar el diario " + d.num + "?")) { await guardarCfg("diariosPago", CF("diariosPago").filter(x => x.id !== d.id)); S.djSel = null; render(); } return true; }
-    case "adddjl": { const d = djSel(), u = d.lineas[d.lineas.length - 1] || {}; d.lineas.push({ id: uid(), fecha: u.fecha || hoy(), tercero_id: null, factura_id: null, importe: "", desc: "", banco: u.banco || (DJ[d.tipo].efecto ? "" : bancoDef(d.tipo)), forma: u.forma || (DJ[d.tipo].efecto ? "" : DJ[d.tipo].forma), venc: "", numero: "" }); await guardarDJ(d); render(); return true; }
+    case "adddjl": { const d = djSel(), u = d.lineas[d.lineas.length - 1] || {}; if (DJ[d.tipo].op) { d.lineas.push({ id: uid(), fecha: u.fecha || hoy(), efecto_id: null, banco: u.banco || bancoDef(d.tipo), gastos: "", intereses: "", venc: "", numero: "", desc: "" }); await guardarDJ(d); render(); return true; } d.lineas.push({ id: uid(), fecha: u.fecha || hoy(), tercero_id: null, factura_id: null, importe: "", desc: "", banco: u.banco || (DJ[d.tipo].efecto ? "" : bancoDef(d.tipo)), forma: u.forma || (DJ[d.tipo].efecto ? "" : DJ[d.tipo].forma), venc: "", numero: "" }); await guardarDJ(d); render(); return true; }
     case "deldjl": { const d = djSel(); d.lineas.splice(+b.dataset.i, 1); await guardarDJ(d); render(); return true; }
     case "propuesta": {
       const d = djSel(), D = DJ[d.tipo], hasta = S.djHasta || hoy(), ya = new Set(d.lineas.map(l => l.factura_id));
+      if (D.op) { const usados = new Set(d.lineas.map(l => l.efecto_id)), es = efectos().filter(e => e.tipo === D.ter && D.estados.includes(e.estado) && e.venc <= hasta && !usados.has(e.id)).sort((x, y) => x.venc.localeCompare(y.venc));
+        if (!es.length) { alert("No hay efectos disponibles con vencimiento hasta " + hasta + "."); return true; }
+        es.forEach(e => d.lineas.push({ id: uid(), fecha: hoy(), efecto_id: e.id, banco: bancoDef(d.tipo), gastos: "", intereses: "", venc: "", numero: "", desc: "" })); await guardarDJ(d); render(); return true; }
       const fs = pendientesDe(D.lado).filter(f => (f.fecha_vencimiento || "") <= hasta && !ya.has(f.id)).sort((x, y) => (x.fecha_vencimiento || "").localeCompare(y.fecha_vencimiento || ""));
       if (!fs.length) { alert("No hay facturas pendientes con vencimiento hasta " + hasta + "."); return true; }
       fs.forEach(f => { const t = terPorId(f.tercero_id) || {}; d.lineas.push({ id: uid(), fecha: hoy(), tercero_id: f.tercero_id, factura_id: f.id, importe: pendienteF(f), desc: numExt(f) + " " + (t.nombre || ""), banco: D.efecto ? "" : bancoDef(d.tipo), forma: D.efecto ? "" : ((t.ficha || {}).pago || {}).forma || D.forma, venc: D.efecto ? (f.fecha_vencimiento >= hoy() ? f.fecha_vencimiento : hoy()) : "", numero: "" }); });
@@ -2258,8 +2334,8 @@ async function cambioTes(t) {
     const x = djSel(), l = x.lineas[+d.dj], k = d.k, D = DJ[x.tipo];
     if (k === "tercero") { const c = t.value.trim() ? terPorCod(t.value) : null; if (t.value.trim() && (!c || c.tipo !== D.ter)) alert("No existe esa cuenta de " + (D.ter === "C" ? "cliente." : "proveedor.")); l.tercero_id = c && c.tipo === D.ter ? c.id : null; l.factura_id = null; l.importe = ""; }
     else if (k === "factura_id") { l.factura_id = t.value || null; const f = S.d.facturas.find(y => y.id === t.value); if (f) { l.importe = pendienteF(f); if (!l.desc) l.desc = numExt(f); if (D.efecto && !l.venc) l.venc = f.fecha_vencimiento || ""; } }
-    else l[k] = k === "importe" ? (r2(num(t.value)) || 0) : t.value.trim();
-    await guardarDJ(x); if (["tercero", "factura_id", "importe"].includes(k)) render(); return true;
+    else l[k] = ["importe", "gastos", "intereses"].includes(k) ? (r2(num(t.value)) || 0) : t.value.trim();
+    await guardarDJ(x); if (["tercero", "factura_id", "importe", "efecto_id", "gastos", "intereses"].includes(k)) render(); return true;
   }
   if (d.ef !== undefined) { const s = S.efSel || (S.efSel = new Set()); const v = ["ef-fecha", "ef-banco", "ef-gastos", "ef-int"].map(i => [i, (document.getElementById(i) || {}).value]); if (t.checked) s.add(d.ef); else s.delete(d.ef); render(); v.forEach(([i, x]) => { const e = document.getElementById(i); if (e && x !== undefined) e.value = x; }); return true; }
   if (d.ex !== undefined) return true;
@@ -2361,7 +2437,7 @@ V.presupuesto = () => {
 SEED.creditos = () => ({});
 const vencidasDe = t => pendientesDe("V", t.id).filter(f => (f.fecha_vencimiento || "") < hoy());
 V.credito = () => {
-  const lim = CF("creditos"), L = S.d.terceros.filter(t => t.tipo === "C").map(t => { const v = vencidasDe(t), pend = r2(pendientesDe("V", t.id).reduce((s, f) => s + pendienteF(f), 0)), ef = r2(efectos().filter(e => e.tercero_id === t.id && !["Cobrado", "Pagado"].includes(e.estado)).reduce((s, e) => s + e.importe, 0)); return { t, v, vencido: r2(v.reduce((s, f) => s + pendienteF(f), 0)), dias: v.length ? Math.max(...v.map(f => Math.floor((new Date(hoy()) - new Date(f.fecha_vencimiento)) / 864e5))) : 0, pend, ef, riesgo: r2(pend + ef) }; }).sort((a, b) => b.vencido - a.vencido || b.riesgo - a.riesgo), sel = L.find(x => x.t.id === S.selCred);
+  const lim = CF("creditos"), L = S.d.terceros.filter(t => t.tipo === "C").map(t => { const v = vencidasDe(t), pend = r2(pendientesDe("V", t.id).reduce((s, f) => s + pendienteF(f), 0)), ef = r2(efectos().filter(e => e.tercero_id === t.id && !["Cobrado", "Pagado", "Renegociado"].includes(e.estado)).reduce((s, e) => s + e.importe, 0)); return { t, v, vencido: r2(v.reduce((s, f) => s + pendienteF(f), 0)), dias: v.length ? Math.max(...v.map(f => Math.floor((new Date(hoy()) - new Date(f.fecha_vencimiento)) / 864e5))) : 0, pend, ef, riesgo: r2(pend + ef) }; }).sort((a, b) => b.vencido - a.vencido || b.riesgo - a.riesgo), sel = L.find(x => x.t.id === S.selCred);
   return pagina("Crédito y cobros", btn("carta", "Carta de reclamación", "", !sel || !sel.v.length), `<div class="lista"><table class="editable"><tr><th>Cliente</th><th>Nombre</th><th class="n">Facturas pendientes</th><th class="n">Efectos pendientes</th><th class="n">Riesgo total</th><th class="n">Límite de crédito</th><th class="n">Disponible</th><th class="n">Vencido</th><th class="n">Días</th></tr>${L.map(x => { const l = +lim[x.t.id] || 0; return `<tr data-sel class="${sel && sel.t.id === x.t.id ? "sel" : ""} ${l && x.riesgo > l ? "ko" : ""}"><td><a data-a="selcred" data-id="${x.t.id}">${esc(x.t.codigo)}</a></td><td>${esc(x.t.nombre)}</td><td class="n">${sal(x.pend)}</td><td class="n">${sal(x.ef)}</td><td class="n">${sal(x.riesgo)}</td><td><input class="n" data-lim="${x.t.id}" size="10" value="${l || ""}"></td><td class="n">${l ? eur(l - x.riesgo) : ""}</td><td class="n">${sal(x.vencido)}</td><td class="n">${x.dias || ""}</td></tr>`; }).join("") || `<tr><td colspan="9" class="vacio">Sin clientes.</td></tr>`}</table></div><p style="color:var(--tx2)">En rojo, clientes por encima de su límite. Es informativo: no bloquea pedidos ni facturas. Seleccione un cliente con vencidos para preparar la carta.</p>`, { tabs: ["Lista"] });
 };
 V.carta = () => {
