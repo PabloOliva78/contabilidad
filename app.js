@@ -31,6 +31,7 @@ const PGC = [
   ["4752","H.P. acreedora por Impuesto sobre Sociedades"],["4771","H.P. recargo de equivalencia"],["4773","H.P. IVA repercutido intracomunitario"],
   ["310","Materias primas"],["320","Elementos y conjuntos incorporables"],["350","Productos terminados"],["610","Variación de existencias de mercaderías"],["611","Variación de existencias de materias primas"],["612","Variación de existencias de otros aprovisionamientos"],["712","Variación de existencias de productos terminados"],
   ["218","Elementos de transporte"],["280","Amortización acumulada del inmovilizado intangible"],["2806","Amortización acumulada de aplicaciones informáticas"],["2811","Amortización acumulada de construcciones"],["2813","Amortización acumulada de maquinaria"],["2816","Amortización acumulada de mobiliario"],["2817","Amortización acumulada de equipos informáticos"],["2818","Amortización acumulada de elementos de transporte"],["671","Pérdidas procedentes del inmovilizado material"],["680","Amortización del inmovilizado intangible"],
+  ["401","Proveedores, efectos comerciales a pagar"],["431","Clientes, efectos comerciales a cobrar"],["543","Créditos a corto plazo por enajenación de inmovilizado"],["665","Intereses por descuento de efectos"],["771","Beneficios procedentes del inmovilizado material"],
   ["555","Partidas pendientes de aplicación"],["602","Compras de otros aprovisionamientos"],["606","Descuentos sobre compras por pronto pago"],["609","Rappels por compras"]
 ];
 
@@ -164,11 +165,15 @@ async function listarEmpresas() {
   return [...principal, ...dr].sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 // db enruta cada operación al almacén de la empresa activa (nube, navegador o archivo de Drive)
-const db = new Proxy({}, { get: (_, m) => (...a) => m === "empresas" ? listarEmpresas() : backendActual()[m](...a) });
+function vigilarPeriodo(m, a) { // en un período cerrado (calendario del libro mayor) no se tocan asientos
+  const fechas = m === "crearAsiento" ? [a[1]] : m === "modificarAsiento" ? [a[1], (S.d.asientos.find(x => x.id === a[0]) || {}).fecha] : m === "borrarAsiento" ? [(S.d.asientos.find(x => x.id === a[0]) || {}).fecha] : [];
+  const f = fechas.find(periodoCerrado); if (f) throw new Error("El período " + String(f).slice(0, 7) + " está cerrado en el calendario del libro mayor. Ábralo para registrar o modificar asientos de esa fecha.");
+}
+const db = new Proxy({}, { get: (_, m) => (...a) => { if (m === "empresas") return listarEmpresas(); vigilarPeriodo(m, a); return backendActual()[m](...a); } });
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, afEdit: null, selAF: null, bajaAF: false, amortHasta: "", bancoSel: "", concilFecha: "", concilSaldo: "", concilMarcas: null, fechaRegul: "", selRegul: null, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, djAbierto: null, djSel: null, djMostrar: "", djHasta: "", efSel: null, carteraTipo: "", carteraEst: "", selRem: null, extracto: null, antFecha: "", extTer: "", extDesde: "", extHasta: "", perMes: "", selPerio: null, libDesde: "", libHasta: "", afEdit: null, selAF: null, bajaAF: false, amortHasta: "", bancoSel: "", concilFecha: "", concilSaldo: "", concilMarcas: null, fechaRegul: "", selRegul: null, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -236,21 +241,29 @@ const NAV = [
   { g: "Libro mayor", sec: [
     { n: "Entradas de diario", it: [["diario", "Diarios generales"]] },
     { n: "Consultas e informes", sub: [{ n: "Consultas", it: [["mayor", "Transacciones del libro mayor"]] }, { n: "Informes", it: [["sumas", "Balance de comprobación"], ["estados", "Estados financieros"]] }] },
-    { n: "Cierre del periodo", it: [["cierre", "Cierre del ejercicio"]] },
+    { n: "Tareas periódicas", it: [["periodicos", "Asientos periódicos"]] },
+    { n: "Libros", it: [["librodiario", "Libro diario"]] },
+    { n: "Cierre del periodo", it: [["calendario", "Calendario del libro mayor"], ["cierre", "Cierre del ejercicio"]] },
     { n: "Configurar", sub: [{ n: "Plan de cuentas", it: [["cuentas", "Cuentas principales"]] }, { n: "Parámetros", it: [["parcont", "Parámetros de Contabilidad general"]] }] }] },
   { g: "Cuentas a cobrar", sec: [
     { n: "Clientes", it: [["clientes", "Todos los clientes"]] },
     { n: "Facturas y cobros", sub: [{ n: "Facturas", it: [["fventa", "Facturas de cliente"], ["diariofcli", "Diario de facturas de cliente"]] }, { n: "Cobros", it: [["cobros", "Cobros pendientes"]] }] },
+    { n: "Cobros y efectos", it: [["dcobro", "Diario de pagos de clientes"], ["dletra", "Diario de creación de letras de cambio"], ["cartera", "Cartera de efectos"], ["remesas", "Remesas"]] },
+    { n: "Consultas e informes", it: [["antcli", "Antigüedad de saldos de clientes"], ["extcli", "Extracto de cuenta de cliente"]] },
     { n: "Configurar", it: [["parcli", "Parámetros de clientes"]] }] },
   { g: "Cuentas a pagar", sec: [
     { n: "Proveedores", it: [["proveedores", "Todos los proveedores"]] },
     { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"], ["diariofprov", "Diario de facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] },
+    { n: "Pagos y efectos", it: [["dpago", "Diario de pagos a proveedores"], ["dpagare", "Diario de creación de pagarés"], ["cartera", "Cartera de efectos"]] },
+    { n: "Consultas e informes", it: [["antprov", "Antigüedad de saldos de proveedores"], ["extprov", "Extracto de cuenta de proveedor"]] },
     { n: "Configurar", it: [["parprov", "Parámetros de proveedores"]] }] },
   { g: "Gestión de efectivo y bancos", sec: [
-    { n: "Bancos", it: [["bancos", "Cuentas bancarias"], ["movbanco", "Transacciones bancarias"], ["conciliar", "Conciliación bancaria"]] }] },
+    { n: "Bancos", it: [["bancos", "Cuentas bancarias"], ["movbanco", "Transacciones bancarias"], ["extractos", "Extractos bancarios"], ["conciliar", "Conciliación bancaria"], ["transfer", "Transferencias bancarias"]] },
+    { n: "Efectivo", it: [["prevision", "Previsión de flujo de efectivo"], ["cartera", "Cartera de efectos"], ["remesas", "Remesas"]] }] },
   { g: "Activos fijos", sec: [
     { n: "Activos fijos", it: [["activos", "Activos fijos"]] },
     { n: "Periódico", it: [["amort", "Propuesta de amortización"]] },
+    { n: "Consultas e informes", it: [["aftrans", "Transacciones de activos fijos"], ["afcuadro", "Cuadro de amortización"]] },
     { n: "Configurar", it: [["grupoact", "Grupos de activos fijos"]] }] },
   { g: "Ventas y marketing", sec: [
     { n: "Pedidos de venta", it: [["pventa", "Todos los pedidos de venta"]] }] },
@@ -271,7 +284,7 @@ const NAV = [
 ];
 const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes", regexist: "Regularización de existencias", cierre: "Cierre del ejercicio", bancos: "Cuentas bancarias", movbanco: "Transacciones bancarias", conciliar: "Conciliación bancaria", activos: "Activos fijos", amort: "Propuesta de amortización", grupoact: "Grupos de activos fijos" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes", regexist: "Regularización de existencias", cierre: "Cierre del ejercicio", bancos: "Cuentas bancarias", movbanco: "Transacciones bancarias", conciliar: "Conciliación bancaria", activos: "Activos fijos", amort: "Propuesta de amortización", grupoact: "Grupos de activos fijos", dpago: "Diario de pagos a proveedores", dcobro: "Diario de pagos de clientes", dpagare: "Diario de creación de pagarés", dletra: "Diario de creación de letras de cambio", cartera: "Cartera de efectos", remesas: "Remesas", extractos: "Extractos bancarios", transfer: "Transferencias bancarias", prevision: "Previsión de flujo de efectivo", antcli: "Antigüedad de saldos de clientes", antprov: "Antigüedad de saldos de proveedores", extcli: "Extracto de cuenta de cliente", extprov: "Extracto de cuenta de proveedor", periodicos: "Asientos periódicos", librodiario: "Libro diario", calendario: "Calendario del libro mayor", aftrans: "Transacciones de activos fijos", afcuadro: "Cuadro de amortización" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -1793,7 +1806,7 @@ V.activos = () => {
   const L = [...CF("activos")].sort((a, b) => a.id.localeCompare(b.id)), sel = L.find(x => x.id === S.selAF);
   const filas = L.map(x => `<tr data-sel class="${sel && sel.id === x.id ? "sel" : ""}" data-a="selaf" data-id="${esc(x.id)}"><td><a data-a="editaf" data-id="${esc(x.id)}">${esc(x.id)}</a></td><td>${esc(x.nombre)}</td><td>${esc(x.grupo)}</td><td>${x.alta || ""}</td><td class="n">${eur(+x.coste || 0)}</td><td class="n">${eur(amortAcum(x))}</td><td class="n">${eur(estadoAF(x) === "Abierto" ? r2((+x.coste || 0) - amortAcum(x)) : 0)}</td><td>${estadoAF(x)}</td></tr>`).join("");
   const acc = btn("nuevoaf", "+ Nuevo") + btn("editaf", "Editar", `data-id="${sel ? esc(sel.id) : ""}"`, !sel) + btn("delaf", "Eliminar", "", !sel) + SEP + btn("vista", "Propuesta de amortización", 'data-v="amort"') + btn("bajaaf", "Dar de baja", "", !sel || estadoAF(sel) !== "Abierto") + btn("deshacerbaja", "Deshacer baja", "", !sel || estadoAF(sel) === "Abierto");
-  return pagina("Activos fijos", acc, `${S.bajaAF && sel ? `<div class="card"><b>Baja de ${esc(sel.id)} · ${esc(sel.nombre)}</b><div class="row" style="margin-top:.5rem"><label>Fecha de baja<br><input type="date" id="baja-fecha" value="${hoy()}"></label><span>Valor neto: <b>${eur(r2(+sel.coste - amortAcum(sel)))}</b></span><button class="p" data-a="confirmarbaja">Registrar baja</button><button data-a="cancelarbaja">Cancelar</button></div><p style="color:var(--tx2)">Da de baja el coste y la amortización acumulada; el valor neto va a pérdidas (671000001). Registre antes la amortización hasta la fecha. Si hay venta, la factura se registra aparte contra esa cuenta.</p></div>` : ""}
+  return pagina("Activos fijos", acc, `${S.bajaAF && sel ? `<div class="card"><b>Baja de ${esc(sel.id)} · ${esc(sel.nombre)}</b><div class="row" style="margin-top:.5rem"><label>Fecha de baja<br><input type="date" id="baja-fecha" value="${hoy()}"></label><span>Valor neto: <b>${eur(r2(+sel.coste - amortAcum(sel)))}</b></span><label>Importe de venta (si se vende)<br><input id="baja-venta" size="10"></label><button class="p" data-a="confirmarbaja">Registrar baja</button><button data-a="cancelarbaja">Cancelar</button></div><p style="color:var(--tx2)">Da de baja el coste y la amortización acumulada. Sin venta, el valor neto va a pérdidas (671000001). Con venta, el importe (sin IVA) queda a cobrar en 543000001 y la diferencia va a beneficio (771000001) o pérdida (671000001); la factura con su IVA se registra aparte contra la 543. Registre antes la amortización hasta la fecha.</p></div>` : ""}
    <div class="pagina"><div class="lista"><table><tr><th>Número de activo fijo</th><th>Nombre</th><th>Grupo</th><th>Fecha de adquisición</th><th class="n">Precio de adquisición</th><th class="n">Amortización acumulada</th><th class="n">Valor neto contable</th><th>Estado</th></tr>${filas || `<tr><td colspan="8" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div></div>`);
 };
 function fichaActivo() {
@@ -1895,10 +1908,11 @@ async function accionFin(a, b) {
       const acum = amortAcum(x), neto = r2(x.coste - acum);
       if (saldoCta(g.ctaActivo, fecha) < x.coste && !confirm("La cuenta " + g.ctaActivo + " no tiene saldo suficiente (¿está contabilizada la compra?). ¿Continuar?")) return true;
       if (!confirm("¿Registrar la baja de " + x.id + " con fecha " + fecha + "?")) return true;
-      const ap = []; if (acum) ap.push({ cuenta: g.ctaAcum, concepto: null, debe: acum, haber: 0 }); if (neto) ap.push({ cuenta: "671000001", concepto: null, debe: neto, haber: 0 }); ap.push({ cuenta: g.ctaActivo, concepto: null, debe: 0, haber: r2(x.coste) });
+      const venta = r2(num(document.getElementById("baja-venta").value || 0)) || 0, res = r2(venta - neto);
+      const ap = []; if (acum) ap.push({ cuenta: g.ctaAcum, concepto: null, debe: acum, haber: 0 }); if (venta) ap.push({ cuenta: "543000001", concepto: null, debe: venta, haber: 0 }); if (res < 0) ap.push({ cuenta: "671000001", concepto: null, debe: -res, haber: 0 }); ap.push({ cuenta: g.ctaActivo, concepto: null, debe: 0, haber: r2(x.coste) }); if (res > 0) ap.push({ cuenta: "771000001", concepto: null, debe: 0, haber: res });
       for (const p of ap) await asegurarCta(p.cuenta);
       const aid = await db.crearAsiento(S.emp.id, fecha, "Baja de activo fijo " + x.id + " " + x.nombre, ap, "activo-baja", x.id);
-      await guardarCfg("activos", L().map(y => y.id === x.id ? { ...y, baja: { fecha, asiento: aid } } : y)); S.bajaAF = false; await recargar(); return true;
+      await guardarCfg("activos", L().map(y => y.id === x.id ? { ...y, baja: { fecha, asiento: aid, venta } } : y)); S.bajaAF = false; await recargar(); return true;
     }
     case "deshacerbaja": { const x = sel(); if (x && x.baja && confirm("¿Deshacer la baja? Se eliminará su asiento.")) { await db.borrarAsiento(x.baja.asiento); await guardarCfg("activos", L().map(y => y.id === x.id ? { ...y, baja: null } : y)); await recargar(); } return true; }
     case "registraramort": {
@@ -1938,6 +1952,325 @@ function cambioFin(t) {
   if (t.id === "banco") { S.bancoSel = t.value; S.concilMarcas = null; S.concilSaldo = ""; render(); return true; }
   if (t.id === "con-fecha") { S.concilFecha = t.value; render(); return true; }
   if (t.id === "con-saldo") { S.concilSaldo = t.value.trim(); render(); return true; }
+  return false;
+}
+
+/* ---------------- Diarios de cobros y pagos, efectos (pagarés y letras), cartera y remesas ---------------- */
+SEED.diariosPago = () => []; SEED.efectos = () => []; SEED.remesas = () => [];
+const EF = { cart: "431000001", desc: "431100001", gest: "431200001", imp: "431500001", deuda: "520800001", pagar: "401000001", gastos: "626000001", int: "665000001" };
+const DJ = {
+  pago: { titulo: "Diario de pagos a proveedores", lado: "C", ter: "P", pref: "PP", forma: "Transferencia" },
+  cobro: { titulo: "Diario de pagos de clientes", lado: "V", ter: "C", pref: "PC", forma: "Transferencia" },
+  pagare: { titulo: "Diario de creación de pagarés", lado: "C", ter: "P", pref: "CP", forma: "Pagaré", efecto: true },
+  letra: { titulo: "Diario de creación de letras de cambio", lado: "V", ter: "C", pref: "CL", forma: "Letra de cambio", efecto: true }
+};
+const FORMAS_DJ = ["Transferencia", "Recibo domiciliado", "Confirming", "Cheque", "Efectivo", "Tarjeta"];
+const bancoDef = tipo => parm(DJ[tipo].lado === "V" ? "cli" : "prov", "cuentaTes", "") || (CF("bancos").find(b => b.cuenta) || {}).cuenta || cuentaSis("572");
+const dlCtas = () => `<datalist id="dl">${optsCuentas()}</datalist><datalist id="dlbancos">${[...new Set([...CF("bancos").map(b => b.cuenta).filter(Boolean), ...movs().filter(c => c.codigo.startsWith("57")).map(c => c.codigo)])].map(c => `<option value="${c}">${esc(nombreCuenta(c))}</option>`).join("")}</datalist>`;
+const pendientesDe = (lado, ter) => S.d.facturas.filter(f => f.tipo === lado && estadoF(f) === "Registrado" && pendienteF(f) > 0 && (!ter || f.tercero_id === ter));
+const numExt = f => f.tipo === "V" ? f.numero : (f.num_externo || f.numero);
+const djSel = () => CF("diariosPago").find(d => d.id === S.djAbierto);
+const guardarDJ = d => guardarCfg("diariosPago", CF("diariosPago").map(x => x.id === d.id ? d : x));
+function vistaDJ(tipo) {
+  const D = DJ[tipo], abierto = djSel();
+  if (abierto && abierto.tipo === tipo) return vistaDJLineas(abierto);
+  const mostrar = S.djMostrar || "No registrado";
+  const L = CF("diariosPago").filter(d => d.tipo === tipo && (mostrar === "Todo" || (mostrar === "Registrado") === !!d.registrado)).sort((a, b) => b.num.localeCompare(a.num)), sel = L.find(d => d.id === S.djSel);
+  const filas = L.map(d => `<tr data-sel class="${sel && sel.id === d.id ? "sel" : ""}" data-a="seldj" data-id="${d.id}"><td><a data-a="abrirdj" data-id="${d.id}">${d.num}</a></td><td>${esc(d.nombre)}</td><td><input data-djc="${d.id}" value="${esc(d.desc || "")}" size="50" ${d.registrado ? "disabled" : ""}></td><td>${d.registrado ? "✓" : ""}</td><td>${d.registrado || ""}</td><td class="n">${eur(d.lineas.reduce((s, l) => s + (+l.importe || 0), 0))}</td></tr>`).join("");
+  return pagina(D.titulo, btn("nuevodj", "+ Nuevo", `data-t="${tipo}"`) + btn("abrirdj", "Líneas", `data-id="${sel ? sel.id : ""}"`, !sel) + btn("deldj", "Eliminar", "", !sel || !!sel.registrado), `<div class="lista"><table class="editable"><tr><th>Número de lote de diario</th><th>Nombre</th><th>Descripción</th><th>Contabilizado</th><th>Registrado en</th><th class="n">Importe</th></tr>${filas || `<tr><td colspan="6" class="vacio">No se encontró ningún elemento que mostrar aquí.</td></tr>`}</table></div>`,
+    { tabs: ["Lista"], filtros: `<label>Mostrar<select id="dj-mostrar">${["No registrado", "Registrado", "Todo"].map(x => `<option ${x === mostrar ? "selected" : ""}>${x}</option>`).join("")}</select></label>` });
+}
+function vistaDJLineas(d) {
+  const D = DJ[d.tipo], reg = !!d.registrado, dis = reg ? "disabled" : "", tab = S.tabs.djl || "Visión general", ef = D.efecto;
+  const ters = S.d.terceros.filter(t => t.tipo === D.ter);
+  const filas = d.lineas.map((l, i) => {
+    const t = terPorId(l.tercero_id), fs = pendientesDe(D.lado, l.tercero_id), act = S.d.facturas.find(f => f.id === l.factura_id);
+    if (act && !fs.includes(act)) fs.unshift(act);
+    const inp = (k, size, extra = "") => `<input data-dj="${i}" data-k="${k}" size="${size}" value="${esc(l[k] ?? "")}" ${extra} ${dis}>`;
+    const comunes = `<td><input type="date" data-dj="${i}" data-k="fecha" value="${l.fecha || ""}" ${dis}></td><td><input data-dj="${i}" data-k="tercero" list="dlter" size="8" value="${esc(t ? t.codigo : "")}" ${dis}></td><td>${esc(t ? t.nombre : "")}</td>`;
+    const fin = `<td>${l.asiento ? asNum(S.d.asientos.find(a => a.id === l.asiento)) : ""}</td><td>${reg ? "" : `<button class="d" data-a="deldjl" data-i="${i}">✕</button>`}</td></tr>`;
+    if (tab === "General") return `<tr>${comunes}<td>${inp("desc", 40)}</td><td>${inp("referencia", 16)}</td>${fin}`;
+    if (tab === (ef ? DJ[d.tipo].forma.split(" ")[0] : "Pago")) return `<tr>${comunes}${ef ? `<td><input type="date" data-dj="${i}" data-k="venc" value="${l.venc || ""}" ${dis}></td><td>${inp("numero", 14)}</td><td>${inp("banco", 10, 'list="dlbancos"')}</td><td>${inp("lugar", 14)}</td>` : `<td><select data-dj="${i}" data-k="forma" ${dis}>${optsHtml(FORMAS_DJ, l.forma)}</select></td><td>${inp("especificacion", 16)}</td><td>${inp("numero", 14)}</td>`}${fin}`;
+    return `<tr>${comunes}<td><select data-dj="${i}" data-k="factura_id" ${dis}>${optsHtml(fs.map(f => [f.id, numExt(f) + " · " + (f.fecha_vencimiento || "") + " · " + eur(pendienteF(f))]), l.factura_id)}</select></td><td><input class="n" data-dj="${i}" data-k="importe" size="10" value="${l.importe ?? ""}" ${dis}></td><td>${inp("desc", 26)}</td>${ef ? `<td><input type="date" data-dj="${i}" data-k="venc" value="${l.venc || ""}" ${dis}></td>` : `<td>${inp("banco", 10, 'list="dlbancos"')}</td>`}${fin}`;
+  }).join("");
+  const tabEf = ef ? D.forma.split(" ")[0] : "Pago";
+  const heads = tab === "General" ? ["Descripción", "Referencia del pago"] : tab === tabEf ? (ef ? ["Fecha de vencimiento", "N.º de " + tabEf.toLowerCase(), "Cuenta bancaria", "Lugar de expedición"] : ["Forma de pago", "Especificación del pago", "Referencia / n.º"]) : ["Factura (vencimiento · pendiente)", "Importe", "Descripción", ef ? "Fecha de vencimiento" : "Cuenta de contrapartida (banco)"];
+  const tot = r2(d.lineas.reduce((s, l) => s + (+l.importe || 0), 0));
+  const acc = btn("volverdj", "← Diarios") + (reg ? "" : btn("adddjl", "+ Línea") + btn("propuesta", ef ? "Propuesta de efectos" : "Propuesta de pago") + btn("validardj", "Validar") + `<button class="p" data-a="registrardj">Registrar</button>`);
+  return pagina(D.titulo, acc, `${dlCtas()}<datalist id="dlter">${ters.map(t => `<option value="${esc(t.codigo)}">${esc(t.nombre)}</option>`).join("")}</datalist>
+   <div class="lista"><table class="editable"><tr><th>Fecha</th><th>Cuenta</th><th>Nombre</th>${heads.map(h => `<th>${h}</th>`).join("")}<th>Asiento</th><th></th></tr>${filas || `<tr><td colspan="9" class="vacio">Sin líneas. Use "+ Línea" o la propuesta.</td></tr>`}</table></div><div class="pie"><span>Líneas <b>${d.lineas.length}</b></span><span>Total del diario <b>${eur(tot)}</b></span></div>`,
+    { tabs: ["Visión general", "General", tabEf], tabKey: "djl", vista: d.num + " : " + d.nombre, filtros: reg ? "" : `<label>Propuesta: vencimientos hasta<input type="date" id="dj-hasta" value="${S.djHasta || hoy()}"></label>` });
+}
+V.dpago = () => vistaDJ("pago"); V.dcobro = () => vistaDJ("cobro"); V.dpagare = () => vistaDJ("pagare"); V.dletra = () => vistaDJ("letra");
+function validarDJ(d) {
+  const D = DJ[d.tipo], err = [], usado = new Map();
+  if (!d.lineas.length) err.push("El diario no tiene líneas.");
+  d.lineas.forEach((l, i) => {
+    if (l.asiento && hayAsiento(l.asiento)) return;
+    const n = "Línea " + (i + 1) + ": ", t = terPorId(l.tercero_id), f = S.d.facturas.find(x => x.id === l.factura_id), imp = r2(+l.importe || 0);
+    if (!l.fecha) err.push(n + "falta la fecha.");
+    if (!t) return err.push(n + "falta la cuenta."); if (!cuentaValida(t.cuenta)) err.push(n + "el tercero no tiene cuenta contable válida.");
+    if (!f || f.tercero_id !== t.id) return err.push(n + "elija la factura que se liquida.");
+    if (!(imp > 0)) err.push(n + "el importe debe ser mayor que cero.");
+    const u = r2((usado.get(f.id) || 0) + imp); usado.set(f.id, u); if (u > pendienteF(f)) err.push(n + "se supera lo pendiente de " + numExt(f) + " (" + eur(pendienteF(f)) + ").");
+    if (D.efecto) { if (!l.venc) err.push(n + "falta la fecha de vencimiento del efecto."); else if (l.venc < l.fecha) err.push(n + "el vencimiento es anterior a la fecha."); }
+    else if (!esMov(l.banco) || !String(l.banco).startsWith("5")) err.push(n + "la cuenta de contrapartida debe ser una cuenta de 9 dígitos de tesorería (57…).");
+  });
+  return err;
+}
+const efectos = () => CF("efectos").filter(e => hayAsiento(e.hist[0].asiento));
+async function registrarDJ(d) {
+  const D = DJ[d.tipo], err = validarDJ(d); if (err.length) return alert("No se puede registrar:\n" + err.join("\n"));
+  if (!confirm("¿Registrar el diario " + d.num + " (" + d.lineas.length + " líneas)?")) return;
+  for (const [n, l] of d.lineas.entries()) {
+    if (l.asiento && hayAsiento(l.asiento)) continue;
+    const t = terPorId(l.tercero_id), f = S.d.facturas.find(x => x.id === l.factura_id), imp = r2(+l.importe), cli = D.lado === "V";
+    const contra = D.efecto ? (cli ? EF.cart : EF.pagar) : l.banco;
+    await asegurarCta(contra, D.efecto ? (cli ? "Efectos comerciales en cartera" : "Proveedores, efectos comerciales a pagar") : "");
+    const tl = { cuenta: t.cuenta, concepto: null, debe: cli ? 0 : imp, haber: cli ? imp : 0, tercero_id: t.id }, cl = { cuenta: contra, concepto: null, debe: cli ? imp : 0, haber: cli ? 0 : imp };
+    const concepto = (d.tipo === "pago" ? "Pago factura " : d.tipo === "cobro" ? "Cobro factura " : d.tipo === "pagare" ? "Pagaré factura " : "Letra factura ") + numExt(f) + " " + t.nombre;
+    l.asiento = await db.crearAsiento(S.emp.id, l.fecha, concepto, cli ? [cl, tl] : [tl, cl], d.tipo, d.num);
+    await db.guardarLiquidacion({ id: uid(), empresa_id: S.emp.id, factura_id: f.id, asiento_id: l.asiento, fecha: l.fecha, importe: imp });
+    await guardarDJ(d);
+    if (D.efecto) await guardarCfg("efectos", [...CF("efectos"), { id: uid(), tipo: D.ter, numero: l.numero || d.num + "-" + (n + 1), tercero_id: t.id, factura: numExt(f), importe: imp, emision: l.fecha, venc: l.venc, banco: l.banco || "", estado: cli ? "En cartera" : "Pendiente", hist: [{ fecha: l.fecha, estado: cli ? "En cartera" : "Pendiente", asiento: l.asiento, asientos: [l.asiento] }] }]);
+    S.d = await db.cargar(S.emp.id);
+  }
+  d.registrado = hoy(); await guardarDJ(d); await recargar();
+}
+/* Cartera de efectos y remesas */
+const ESTADOS_EF = { C: ["En cartera", "En gestión de cobro", "Descontado", "Cobrado", "Impagado"], P: ["Pendiente", "Pagado"] };
+function vistaCartera() {
+  const tp = S.carteraTipo || "C", est = S.carteraEst || "", cli = tp === "C";
+  const L = efectos().filter(e => e.tipo === tp && (!est || e.estado === est)).sort((a, b) => a.venc.localeCompare(b.venc)), sel = S.efSel || (S.efSel = new Set());
+  const filas = L.map(e => { const t = terPorId(e.tercero_id) || {}; return `<tr class="${e.venc < hoy() && !["Cobrado", "Pagado"].includes(e.estado) ? "ko" : ""}"><td><input type="checkbox" data-ef="${e.id}" ${sel.has(e.id) ? "checked" : ""}></td><td>${esc(e.numero)}</td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td><td>${esc(e.factura)}</td><td>${e.emision}</td><td>${e.venc}</td><td class="n">${eur(e.importe)}</td><td>${e.estado}</td></tr>`; }).join("");
+  const marc = L.filter(e => sel.has(e.id)), todos = estados => marc.length && marc.every(e => estados.includes(e.estado));
+  const acc = (cli ? btn("remcobro", "Remesar al cobro", "", !todos(["En cartera"])) + btn("remdesc", "Remesar al descuento", "", !todos(["En cartera"])) + SEP + btn("efcobrar", "Registrar cobro", "", !todos(["En cartera", "En gestión de cobro", "Descontado"])) + btn("efimpago", "Registrar impago", "", !todos(["En cartera", "En gestión de cobro", "Descontado"])) : btn("efcobrar", "Registrar pago", "", !todos(["Pendiente"]))) + SEP + btn("efdeshacer", "Deshacer última operación", "", !marc.length);
+  return pagina("Cartera de efectos", acc, `${dlCtas()}<div class="card"><div class="row"><label>Fecha de la operación<br><input type="date" id="ef-fecha" value="${hoy()}"></label><label>Cuenta bancaria<br><input id="ef-banco" list="dlbancos" size="12" value="${bancoDef(cli ? "cobro" : "pago")}"></label>${cli ? `<label>Gastos bancarios<br><input id="ef-gastos" size="8"></label><label>Intereses de descuento<br><input id="ef-int" size="8"></label>` : ""}<span>Seleccionados: <b>${marc.length}</b> · <b>${eur(marc.reduce((s, e) => s + e.importe, 0))}</b></span></div></div>
+   <div class="lista"><table><tr><th></th><th>N.º de efecto</th><th>Cuenta</th><th>Nombre</th><th>Factura</th><th>Emisión</th><th>Vencimiento</th><th class="n">Importe</th><th>Estado</th></tr>${filas || `<tr><td colspan="9" class="vacio">No hay efectos. Se crean en el diario de creación de ${cli ? "letras de cambio" : "pagarés"}.</td></tr>`}${L.length ? `<tr class="tot"><td colspan="7">Total</td><td class="n">${eur(L.reduce((s, e) => s + e.importe, 0))}</td><td></td></tr>` : ""}</table></div>`,
+    { tabs: ["Cartera"], filtros: `<label>Cartera<select id="car-tipo"><option value="C" ${cli ? "selected" : ""}>Efectos a cobrar (clientes)</option><option value="P" ${cli ? "" : "selected"}>Efectos a pagar (proveedores)</option></select></label><label>Estado<select id="car-est"><option value="">Todos</option>${ESTADOS_EF[tp].map(x => `<option ${x === est ? "selected" : ""}>${x}</option>`).join("")}</select></label>` });
+}
+V.cartera = vistaCartera;
+V.remesas = () => {
+  const L = [...CF("remesas")].sort((a, b) => b.fecha.localeCompare(a.fecha)), E = CF("efectos"), sel = L.find(r => r.id === S.selRem);
+  return pagina("Remesas", btn("remcsv", "Exportar remesa (CSV)", "", !sel), `<div class="pagina"><div class="lista"><table><tr><th>Remesa</th><th>Fecha</th><th>Tipo</th><th>Cuenta bancaria</th><th class="n">Efectos</th><th class="n">Importe</th></tr>${L.map(r => `<tr data-sel class="${sel && sel.id === r.id ? "sel" : ""}" data-a="selrem" data-id="${r.id}"><td>${r.num}</td><td>${r.fecha}</td><td>${r.tipo}</td><td>${r.banco}</td><td class="n">${r.efectos.length}</td><td class="n">${eur(r.importe)}</td></tr>`).join("") || `<tr><td colspan="6" class="vacio">Sin remesas. Se crean desde la cartera de efectos.</td></tr>`}</table></div>
+   <aside class="factbox"><h3>Efectos de la remesa</h3>${sel ? `<dl>${sel.efectos.map(i => E.find(e => e.id === i)).filter(Boolean).map(e => `<dt>${esc(e.numero)} · ${e.venc}</dt><dd>${eur(e.importe)} · ${e.estado}</dd>`).join("")}</dl>` : `<p style="color:var(--tx2)">Seleccione una remesa.</p>`}</aside></div>`, { tabs: ["Lista"] });
+};
+async function operarEfectos(op) {
+  const sel = efectos().filter(e => S.efSel.has(e.id)); if (!sel.length) return;
+  const fecha = document.getElementById("ef-fecha").value, banco = document.getElementById("ef-banco").value.trim(), g = r2(num((document.getElementById("ef-gastos") || {}).value || 0)) || 0, int = r2(num((document.getElementById("ef-int") || {}).value || 0)) || 0;
+  if (!fecha) return alert("Falta la fecha.");
+  const usaBanco = g > 0 || op === "remdesc" || (op === "efcobrar" && sel.some(e => e.estado !== "Descontado")) || sel.some(e => op === "efimpago" && e.estado === "Descontado");
+  if (usaBanco && !esMov(banco)) return alert("Indique la cuenta bancaria (9 dígitos).");
+  if (!confirm("¿Registrar la operación sobre " + sel.length + " efecto(s) por " + eur(sel.reduce((s, e) => s + e.importe, 0)) + "?")) return;
+  let primero = true; const total = r2(sel.reduce((s, e) => s + e.importe, 0)), cambios = new Map();
+  const ap = (cuenta, debe, haber) => ({ cuenta, concepto: null, debe: r2(debe), haber: r2(haber) });
+  for (const e of sel) {
+    const v = e.importe, orig = e.estado === "En gestión de cobro" ? EF.gest : e.estado === "Descontado" ? EF.desc : EF.cart, gg = primero ? g : 0, ii = primero ? int : 0; primero = false;
+    let L = [], estado, txt;
+    if (op === "remcobro") { L = [ap(EF.gest, v, 0), ap(EF.cart, 0, v)]; estado = "En gestión de cobro"; txt = "Remesa al cobro"; if (gg) L.push(ap(EF.gastos, gg, 0), ap(banco, 0, gg)); }
+    else if (op === "remdesc") { L = [ap(banco, v - gg - ii, 0), ...(ii ? [ap(EF.int, ii, 0)] : []), ...(gg ? [ap(EF.gastos, gg, 0)] : []), ap(EF.deuda, 0, v), ap(EF.desc, v, 0), ap(EF.cart, 0, v)]; estado = "Descontado"; txt = "Remesa al descuento"; }
+    else if (op === "efcobrar" && e.tipo === "P") { L = [ap(EF.pagar, v, 0), ap(banco, 0, v)]; estado = "Pagado"; txt = "Pago de pagaré"; }
+    else if (op === "efcobrar") { L = e.estado === "Descontado" ? [ap(EF.deuda, v, 0), ap(EF.desc, 0, v)] : [ap(banco, v, 0), ap(orig, 0, v)]; estado = "Cobrado"; txt = "Cobro de efecto"; if (gg) L.push(ap(EF.gastos, gg, 0), ap(banco, 0, gg)); }
+    else { L = e.estado === "Descontado" ? [ap(EF.deuda, v, 0), ap(banco, 0, v), ap(EF.imp, v, 0), ap(EF.desc, 0, v)] : [ap(EF.imp, v, 0), ap(orig, 0, v)]; estado = "Impagado"; txt = "Impago de efecto"; if (gg) L.push(ap(EF.gastos, gg, 0), ap(banco, 0, gg)); }
+    for (const x of L) await asegurarCta(x.cuenta);
+    const aid = await db.crearAsiento(S.emp.id, fecha, txt + " " + e.numero + " " + ((terPorId(e.tercero_id) || {}).nombre || ""), L, "efecto", e.numero);
+    cambios.set(e.id, { ...e, estado, hist: [...e.hist, { fecha, estado, asientos: [aid] }] });
+    await guardarCfg("efectos", CF("efectos").map(x => cambios.get(x.id) || x));
+  }
+  if (op === "remcobro" || op === "remdesc") await guardarCfg("remesas", [...CF("remesas"), { id: uid(), num: "REM" + String(CF("remesas").length + 1).padStart(5, "0"), fecha, tipo: op === "remcobro" ? "Gestión de cobro" : "Descuento", banco, efectos: sel.map(e => e.id), importe: total }]);
+  S.efSel = new Set(); await recargar();
+}
+async function deshacerEfectos() {
+  const sel = efectos().filter(e => S.efSel.has(e.id)); if (!sel.length || !confirm("¿Deshacer la última operación de " + sel.length + " efecto(s)? Se eliminan sus asientos.")) return;
+  for (const e of sel) {
+    const ult = e.hist[e.hist.length - 1];
+    for (const l of S.d.liquidaciones.filter(l => ult.asientos.includes(l.asiento_id))) await db.borrarLiquidacion(l.id);
+    for (const a of ult.asientos) if (hayAsiento(a)) await db.borrarAsiento(a);
+    if (e.hist.length === 1) await guardarCfg("efectos", CF("efectos").filter(x => x.id !== e.id));
+    else { const h = e.hist.slice(0, -1); await guardarCfg("efectos", CF("efectos").map(x => x.id === e.id ? { ...e, hist: h, estado: h[h.length - 1].estado } : x)); }
+  }
+  S.efSel = new Set(); await recargar();
+}
+
+/* ---------------- Tesorería: extractos Norma 43, transferencias y previsión ---------------- */
+function leerN43(texto) { // cuaderno AEB 43: registros 11 (cabecera), 22 (movimiento), 23 (conceptos) y 33 (final)
+  const cuentas = []; let c = null, m = null;
+  const f = s => "20" + s.slice(0, 2) + "-" + s.slice(2, 4) + "-" + s.slice(4, 6), imp = (clave, s) => r2((clave === "1" ? -1 : 1) * (+s / 100));
+  for (const ln of texto.split(/\r?\n/)) {
+    const t = ln.slice(0, 2);
+    if (t === "11") { c = { entidad: ln.slice(2, 6), oficina: ln.slice(6, 10), cuenta: ln.slice(10, 20), desde: f(ln.slice(20, 26)), hasta: f(ln.slice(26, 32)), inicial: imp(ln[32], ln.slice(33, 47)), final: null, movs: [] }; cuentas.push(c); }
+    else if (t === "22" && c) { m = { id: c.movs.length, fecha: f(ln.slice(10, 16)), importe: imp(ln[27], ln.slice(28, 42)), concepto: ln.slice(52).replace(/^0+/, "").replace(/\s+/g, " ").trim() }; c.movs.push(m); }
+    else if (t === "23" && m) m.concepto = (ln.slice(4).replace(/\s+/g, " ").trim() + " " + m.concepto).trim();
+    else if (t === "33" && c) c.final = imp(ln[58], ln.slice(59, 73));
+  }
+  return cuentas.filter(x => x.movs.length || x.final !== null);
+}
+function casarExtracto() { // empareja cada movimiento del extracto con un apunte sin conciliar del mismo importe y fecha cercana (±5 días)
+  const b = bancoSel(), X = S.extracto; if (!b || !X) return [];
+  const ya = conciliados(b), libres = movsBanco(b).filter(p => !ya.has(p.id)), usados = new Set(), dist = (a, c) => Math.abs((new Date(a) - new Date(c)) / 864e5);
+  return X.movs.map(m => { const p = libres.filter(p => !usados.has(p.id) && r2(+p.debe - +p.haber) === m.importe && dist(p.a.fecha, m.fecha) <= 5).sort((x, y) => dist(x.a.fecha, m.fecha) - dist(y.a.fecha, m.fecha))[0]; if (p) usados.add(p.id); return { m, p }; });
+}
+V.extractos = () => {
+  const b = bancoSel(); if (!b || !b.cuenta) return sinBanco("Extractos bancarios");
+  const X = S.extracto, R = casarExtracto(), ok = R.filter(r => r.p);
+  const filas = R.map(r => `<tr><td>${r.m.fecha}</td><td>${esc(r.m.concepto)}</td><td class="n">${eur(r.m.importe)}</td><td>${r.p ? "Asiento " + asNum(r.p.a) + " · " + esc(r.p.a.concepto || "") : `<input data-ex="${r.m.id}" list="dl" size="12" placeholder="Cuenta contrapartida"> <button data-a="contabex" data-i="${r.m.id}">Contabilizar</button>`}</td><td>${r.p ? "Sí" : "No"}</td></tr>`).join("");
+  return pagina("Extractos bancarios", btn("aplicarex", "Llevar a la conciliación", "", !ok.length), `${dlCtas()}${X ? `<div class="card">Cuenta del fichero <b>${X.entidad}-${X.oficina}-${X.cuenta}</b> · del ${X.desde} al ${X.hasta} · saldo inicial <b>${eur(X.inicial)}</b> · saldo final <b>${X.final === null ? "—" : eur(X.final)}</b> · casados ${ok.length} de ${R.length}</div><div class="lista"><table class="editable"><tr><th>Fecha</th><th>Concepto</th><th class="n">Importe</th><th>Transacción contable</th><th>Casado</th></tr>${filas}</table></div>` : `<p>Cargue un fichero Norma 43 (cuaderno AEB 43) descargado de su banco. Se lee en su ordenador y no se guarda.</p>`}`,
+    { tabs: ["Líneas"], filtros: selBanco(b) + `<label>Fichero Norma 43<input type="file" id="n43" accept=".txt,.n43,.q43,.aeb,.csb"></label>` });
+};
+V.transfer = () => {
+  const L = S.d.asientos.filter(a => a.origen === "transferencia").sort((a, b) => b.fecha.localeCompare(a.fecha));
+  return pagina("Transferencias bancarias", `<button class="p" data-a="transferir">Registrar transferencia</button>`, `${dlCtas()}<div class="card"><div class="row"><label>Fecha<br><input type="date" id="tr-fecha" value="${hoy()}"></label><label>Desde la cuenta<br><input id="tr-de" list="dlbancos" size="12"></label><label>A la cuenta<br><input id="tr-a" list="dlbancos" size="12"></label><label>Importe<br><input id="tr-imp" size="10"></label><label>Comisión<br><input id="tr-com" size="8"></label><label>Descripción<br><input id="tr-desc" size="30"></label></div></div>
+   <div class="lista"><table><tr><th>Fecha</th><th>Asiento</th><th>Descripción</th><th class="n">Importe</th></tr>${L.map(a => `<tr><td>${a.fecha}</td><td>${asNum(a)}</td><td>${esc(a.concepto)}</td><td class="n">${eur(Math.max(...S.d.apuntes.filter(p => p.asiento_id === a.id).map(p => +p.debe)))}</td></tr>`).join("") || `<tr><td colspan="4" class="vacio">Sin transferencias.</td></tr>`}</table></div>`, { tabs: ["Lista"] });
+};
+V.prevision = () => {
+  const cuentas = [...new Set([...CF("bancos").map(b => b.cuenta).filter(Boolean), ...movs().filter(c => c.codigo.startsWith("57")).map(c => c.codigo)])], inicial = r2(cuentas.reduce((s, c) => s + saldoCta(c, hoy()), 0));
+  const M = [];
+  [["V", 1], ["C", -1]].forEach(([lado, s]) => pendientesDe(lado).forEach(f => M.push({ fecha: f.fecha_vencimiento || hoy(), tipo: s > 0 ? "Cobro factura" : "Pago factura", ref: numExt(f), ter: (terPorId(f.tercero_id) || {}).nombre || "", imp: s * pendienteF(f) })));
+  efectos().forEach(e => { if (["En cartera", "En gestión de cobro", "Pendiente"].includes(e.estado)) M.push({ fecha: e.venc, tipo: e.tipo === "C" ? "Letra a cobrar" : "Pagaré a pagar", ref: e.numero, ter: (terPorId(e.tercero_id) || {}).nombre || "", imp: e.tipo === "C" ? e.importe : -e.importe }); });
+  M.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  let saldo = inicial;
+  const filas = M.map(m => { saldo = r2(saldo + m.imp); return `<tr class="${saldo < 0 ? "ko" : ""}"><td>${m.fecha}${m.fecha < hoy() ? " (vencido)" : ""}</td><td>${m.tipo}</td><td>${esc(m.ref)}</td><td>${esc(m.ter)}</td><td class="n">${m.imp > 0 ? eur(m.imp) : ""}</td><td class="n">${m.imp < 0 ? eur(-m.imp) : ""}</td><td class="n">${eur(saldo)}</td></tr>`; }).join("");
+  return pagina("Previsión de flujo de efectivo", "", `<div class="card">Saldo actual en caja y bancos: <b>${eur(inicial)}</b> · Saldo previsto al final: <b>${eur(saldo)}</b></div><div class="lista"><table><tr><th>Fecha prevista</th><th>Origen</th><th>Documento</th><th>Tercero</th><th class="n">Entradas</th><th class="n">Salidas</th><th class="n">Saldo previsto</th></tr>${filas || `<tr><td colspan="7" class="vacio">No hay cobros ni pagos pendientes.</td></tr>`}</table></div>`, { tabs: ["Previsión"] });
+};
+
+/* ---------------- Clientes y proveedores: antigüedad de saldos y extracto de cuenta ---------------- */
+function vistaAntiguedad(tipo) {
+  const cli = tipo === "C", lado = cli ? "V" : "C", al = S.antFecha || hoy(), M = new Map();
+  pendientesDe(lado).forEach(f => { const d = Math.floor((new Date(al) - new Date(f.fecha_vencimiento || f.fecha_emision || al)) / 864e5), i = d <= 0 ? 0 : d <= 30 ? 1 : d <= 60 ? 2 : d <= 90 ? 3 : 4, r = M.get(f.tercero_id) || [0, 0, 0, 0, 0]; r[i] = r2(r[i] + pendienteF(f)); M.set(f.tercero_id, r); });
+  const L = [...M].map(([id, r]) => ({ t: terPorId(id) || {}, r, tot: r2(r.reduce((a, b) => a + b, 0)) })).sort((a, b) => b.tot - a.tot), T = [0, 1, 2, 3, 4].map(i => r2(L.reduce((s, x) => s + x.r[i], 0)));
+  return pagina(cli ? "Antigüedad de saldos de clientes" : "Antigüedad de saldos de proveedores", "", `<div class="lista"><table><tr><th>Cuenta</th><th>Nombre</th><th class="n">No vencido</th><th class="n">1 a 30 días</th><th class="n">31 a 60</th><th class="n">61 a 90</th><th class="n">Más de 90</th><th class="n">Total pendiente</th></tr>${L.map(x => `<tr><td>${esc(x.t.codigo || "")}</td><td>${esc(x.t.nombre || "")}</td>${x.r.map(v => `<td class="n">${sal(v)}</td>`).join("")}<td class="n">${eur(x.tot)}</td></tr>`).join("") || `<tr><td colspan="8" class="vacio">No hay saldos pendientes.</td></tr>`}${L.length ? `<tr class="tot"><td colspan="2">Total</td>${T.map(v => `<td class="n">${eur(v)}</td>`).join("")}<td class="n">${eur(T.reduce((a, b) => a + b, 0))}</td></tr>` : ""}</table></div><p style="color:var(--tx2)">Facturas registradas pendientes, por días desde el vencimiento. Las liquidadas con pagaré o letra ya no cuentan aquí: están en la cartera.</p>`,
+    { tabs: ["Lista"], filtros: `<label>Antigüedad a fecha<input type="date" id="ant-fecha" value="${al}"></label>` });
+}
+V.antcli = () => vistaAntiguedad("C"); V.antprov = () => vistaAntiguedad("P");
+function datosExtracto(tipo) {
+  const cli = tipo === "C", L = S.d.terceros.filter(t => t.tipo === tipo).sort((a, b) => a.codigo.localeCompare(b.codigo)), t = L.find(x => x.id === S.extTer) || L[0];
+  const d = S.extDesde || `${S.ej}-01-01`, h = S.extHasta || `${S.ej}-12-31`, sg = cli ? 1 : -1;
+  const todos = t ? S.d.apuntes.filter(p => p.tercero_id === t.id).map(p => ({ ...p, a: S.d.asientos.find(x => x.id === p.asiento_id) })).filter(p => p.a).sort((x, y) => x.a.fecha.localeCompare(y.a.fecha) || x.a.numero - y.a.numero) : [];
+  const ini = r2(todos.filter(p => p.a.fecha < d).reduce((s, p) => s + sg * (+p.debe - +p.haber), 0));
+  return { L, t, d, h, sg, ini, movs: todos.filter(p => p.a.fecha >= d && p.a.fecha <= h) };
+}
+function vistaExtracto(tipo) {
+  const cli = tipo === "C", D = datosExtracto(tipo); let s = D.ini;
+  const filas = D.movs.map(p => { s = r2(s + D.sg * (+p.debe - +p.haber)); return `<tr><td>${p.a.fecha}</td><td>${asNum(p.a)}</td><td>${esc(p.a.concepto || "")}</td><td class="n">${sal(+p.debe)}</td><td class="n">${sal(+p.haber)}</td><td class="n">${eur(s)}</td></tr>`; }).join("");
+  return pagina(cli ? "Extracto de cuenta de cliente" : "Extracto de cuenta de proveedor", btn("extcsv", "Exportar CSV", `data-t="${tipo}"`, !D.t) + btn("imprimir", "Imprimir"), `${D.t ? `<div class="card"><b>${esc(D.t.codigo)} · ${esc(D.t.nombre)}</b> · NIF ${esc(D.t.cif || "—")} · del ${D.d} al ${D.h}</div>` : ""}<div class="lista"><table><tr><th>Fecha</th><th>Asiento</th><th>Descripción</th><th class="n">Debe</th><th class="n">Haber</th><th class="n">Saldo</th></tr><tr><td colspan="5">Saldo anterior</td><td class="n">${eur(D.ini)}</td></tr>${filas}<tr class="tot"><td colspan="5">Saldo final</td><td class="n">${eur(s)}</td></tr></table></div>`,
+    { tabs: ["Extracto"], filtros: `<label>${cli ? "Cliente" : "Proveedor"}<select id="ext-ter">${D.L.map(t => `<option value="${t.id}" ${D.t && D.t.id === t.id ? "selected" : ""}>${esc(t.codigo + " · " + t.nombre)}</option>`).join("")}</select></label><label>Desde<input type="date" id="ext-desde" value="${D.d}"></label><label>Hasta<input type="date" id="ext-hasta" value="${D.h}"></label>` });
+}
+V.extcli = () => vistaExtracto("C"); V.extprov = () => vistaExtracto("P");
+
+/* ---------------- Contabilidad general: asientos periódicos, libro diario y períodos ---------------- */
+SEED.periodicos = () => []; SEED.cerrados = () => [];
+const mesAct = () => S.perMes || hoy().slice(0, 7);
+V.periodicos = () => {
+  const L = CF("periodicos"), mes = mesAct(), sel = L.find(x => x.id === S.selPerio), cand = [...S.d.asientos].filter(a => !["cierre", "apertura", "regularizacion", "periodico"].includes(a.origen)).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.numero - a.numero).slice(0, 200);
+  const hecho = x => S.d.asientos.some(a => a.documento === `PER-${x.id}-${mes}`);
+  return pagina("Asientos periódicos", `<button class="p" data-a="genper" ${L.some(x => !hecho(x)) ? "" : "disabled"}>Generar los pendientes de ${mes}</button>` + btn("delper", "Eliminar plantilla", "", !sel), `<div class="card"><div class="row"><label>Crear plantilla a partir del asiento<br><select id="per-origen">${cand.map(a => `<option value="${a.id}">${a.fecha} · ${asNum(a)} · ${esc(a.concepto || "")}</option>`).join("")}</select></label><label>Nombre<br><input id="per-nombre" size="30"></label><label>Día del mes<br><input id="per-dia" size="4" value="1"></label><button data-a="addper" ${cand.length ? "" : "disabled"}>+ Crear plantilla</button></div></div>
+   <div class="pagina"><div class="lista"><table><tr><th>Plantilla</th><th>Día</th><th class="n">Importe</th><th>${mes}</th></tr>${L.map(x => `<tr data-sel class="${sel && sel.id === x.id ? "sel" : ""}" data-a="selper" data-id="${x.id}"><td>${esc(x.nombre)}</td><td>${x.dia}</td><td class="n">${eur(x.lineas.reduce((s, p) => s + p.debe, 0))}</td><td>${hecho(x) ? "Generado" : "Pendiente"}</td></tr>`).join("") || `<tr><td colspan="4" class="vacio">Sin plantillas.</td></tr>`}</table></div>
+   <aside class="factbox"><h3>Líneas</h3>${sel ? `<dl>${sel.lineas.map(p => `<dt>${p.cuenta} ${esc(nombreCuenta(p.cuenta))}</dt><dd>${p.debe ? "D " + eur(p.debe) : "H " + eur(p.haber)}</dd>`).join("")}</dl>` : `<p style="color:var(--tx2)">Seleccione una plantilla.</p>`}</aside></div>`, { tabs: ["Lista"], filtros: `<label>Mes<input type="month" id="per-mes" value="${mes}"></label>` });
+};
+function datosLD() {
+  const d = S.libDesde || `${S.ej}-01-01`, h = S.libHasta || `${S.ej}-12-31`;
+  return { d, h, L: S.d.asientos.filter(a => a.fecha >= d && a.fecha <= h).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.numero - b.numero).map(a => ({ a, ap: S.d.apuntes.filter(p => p.asiento_id === a.id) })) };
+}
+V.librodiario = () => {
+  const D = datosLD(), tot = r2(D.L.reduce((s, x) => s + x.ap.reduce((t, p) => t + +p.debe, 0), 0));
+  const filas = D.L.slice(0, 500).map(x => x.ap.map((p, i) => `<tr><td>${i ? "" : x.a.fecha}</td><td>${i ? "" : asNum(x.a)}</td><td>${p.cuenta}</td><td>${esc(nombreCuenta(p.cuenta))}</td><td>${esc(p.concepto || x.a.concepto || "")}</td><td class="n">${sal(+p.debe)}</td><td class="n">${sal(+p.haber)}</td></tr>`).join("")).join("");
+  return pagina("Libro diario", btn("libcsv", "Exportar CSV") + btn("imprimir", "Imprimir"), `${D.L.length > 500 ? `<p>Se muestran 500 de ${D.L.length} asientos; el CSV los incluye todos.</p>` : ""}<div class="lista"><table><tr><th>Fecha</th><th>Asiento</th><th>Cuenta</th><th>Nombre</th><th>Descripción</th><th class="n">Debe</th><th class="n">Haber</th></tr>${filas || `<tr><td colspan="7" class="vacio">Sin asientos.</td></tr>`}<tr class="tot"><td colspan="5">Totales</td><td class="n">${eur(tot)}</td><td class="n">${eur(tot)}</td></tr></table></div>`, { tabs: ["Informe"], filtros: `<label>Desde<input type="date" id="lib-desde" value="${D.d}"></label><label>Hasta<input type="date" id="lib-hasta" value="${D.h}"></label>` });
+};
+V.calendario = () => {
+  const C = new Set(CF("cerrados")), meses = MESES.map((n, i) => ({ n, k: `${S.ej}-${String(i + 1).padStart(2, "0")}` }));
+  return pagina("Calendario del libro mayor", "", `<div class="lista"><table><tr><th>Período</th><th>Desde</th><th class="n">Asientos</th><th>Estado</th><th></th></tr>${meses.map(m => `<tr><td>${m.n} ${S.ej}</td><td>${m.k}-01</td><td class="n">${S.d.asientos.filter(a => a.fecha.startsWith(m.k)).length}</td><td class="${C.has(m.k) ? "ko" : "ok"}">${C.has(m.k) ? "En espera (cerrado)" : "Abierto"}</td><td><button data-a="cambiaper" data-id="${m.k}">${C.has(m.k) ? "Abrir" : "Cerrar"}</button></td></tr>`).join("")}</table></div><p style="color:var(--tx2)">En un período cerrado no se pueden registrar, modificar ni eliminar asientos desde ninguna pantalla.</p>`, { tabs: ["Períodos"], vista: "Ejercicio " + S.ej });
+};
+const periodoCerrado = fecha => fecha && (CF("cerrados") || []).includes(String(fecha).slice(0, 7));
+
+/* ---------------- Activos fijos: transacciones y cuadro de amortización ---------------- */
+V.aftrans = () => {
+  const L = [];
+  CF("activos").forEach(x => { L.push({ f: x.alta, x, t: "Adquisición", i: +x.coste }); if (+x.acumIni) L.push({ f: x.inicio, x, t: "Amortización acumulada inicial", i: +x.acumIni }); (x.hist || []).filter(h => hayAsiento(h.asiento)).forEach(h => L.push({ f: h.hasta, x, t: "Amortización", i: h.importe, a: h.asiento })); if (estadoAF(x) !== "Abierto") L.push({ f: x.baja.fecha, x, t: x.baja.venta ? "Baja por venta" : "Baja por desecho", i: x.baja.venta || 0, a: x.baja.asiento }); });
+  L.sort((a, b) => String(a.f).localeCompare(String(b.f)));
+  return pagina("Transacciones de activos fijos", "", `<div class="lista"><table><tr><th>Fecha</th><th>Activo fijo</th><th>Nombre</th><th>Tipo de transacción</th><th class="n">Importe</th><th>Asiento</th></tr>${L.map(r => `<tr><td>${r.f || ""}</td><td>${esc(r.x.id)}</td><td>${esc(r.x.nombre)}</td><td>${r.t}</td><td class="n">${eur(r.i)}</td><td>${r.a ? asNum(S.d.asientos.find(a => a.id === r.a)) : ""}</td></tr>`).join("") || `<tr><td colspan="6" class="vacio">Sin transacciones.</td></tr>`}</table></div>`, { tabs: ["Lista"] });
+};
+V.afcuadro = () => {
+  const anios = [0, 1, 2, 3, 4, 5].map(i => S.ej + i);
+  const objetivo = (x, y) => { if (!x.inicio || !(+x.meses)) return 0; const n = Math.max(0, Math.min(+x.meses, (y - +x.inicio.slice(0, 4)) * 12 + 12 - +x.inicio.slice(5, 7) + 1)); return n >= +x.meses ? baseAF(x) : r2(baseAF(x) * n / +x.meses); };
+  const L = CF("activos").filter(x => estadoAF(x) === "Abierto"), cuota = (x, y) => r2(objetivo(x, y) - objetivo(x, y - 1));
+  return pagina("Cuadro de amortización", "", `<div class="lista"><table><tr><th>Activo fijo</th><th>Nombre</th><th class="n">Base amortizable</th>${anios.map(y => `<th class="n">${y}</th>`).join("")}</tr>${L.map(x => `<tr><td>${esc(x.id)}</td><td>${esc(x.nombre)}</td><td class="n">${eur(baseAF(x))}</td>${anios.map(y => `<td class="n">${sal(cuota(x, y))}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="9" class="vacio">Sin activos abiertos.</td></tr>`}${L.length ? `<tr class="tot"><td colspan="3">Total</td>${anios.map(y => `<td class="n">${eur(L.reduce((s, x) => s + cuota(x, y), 0))}</td>`).join("")}</tr>` : ""}</table></div><p style="color:var(--tx2)">Cuota lineal teórica de cada año desde el inicio de la amortización de cada activo.</p>`, { tabs: ["Informe"] });
+};
+
+async function accionTes(a, b) {
+  const id = b.dataset.id;
+  switch (a) {
+    case "seldj": S.djSel = id; if (b.tagName === "TR") render(); return true;
+    case "nuevodj": { const tp = b.dataset.t, D = DJ[tp], n = CF("diariosPago").filter(d => d.tipo === tp).reduce((m, d) => Math.max(m, +d.num.slice(2)), 0) + 1, d = { id: uid(), tipo: tp, num: D.pref + String(n).padStart(6, "0"), nombre: D.pref, desc: D.titulo.replace("Diario de ", "").toUpperCase(), registrado: "", lineas: [] }; await guardarCfg("diariosPago", [...CF("diariosPago"), d]); S.djAbierto = d.id; S.djSel = d.id; S.tabs.djl = "Visión general"; render(); return true; }
+    case "abrirdj": if (id || S.djSel) { S.djAbierto = id || S.djSel; S.tabs.djl = "Visión general"; render(); } return true;
+    case "volverdj": S.djAbierto = null; render(); return true;
+    case "deldj": { const d = CF("diariosPago").find(x => x.id === S.djSel); if (d && !d.registrado && !d.lineas.some(l => l.asiento && hayAsiento(l.asiento)) && confirm("¿Eliminar el diario " + d.num + "?")) { await guardarCfg("diariosPago", CF("diariosPago").filter(x => x.id !== d.id)); S.djSel = null; render(); } return true; }
+    case "adddjl": { const d = djSel(), u = d.lineas[d.lineas.length - 1] || {}; d.lineas.push({ id: uid(), fecha: u.fecha || hoy(), tercero_id: null, factura_id: null, importe: "", desc: "", banco: u.banco || (DJ[d.tipo].efecto ? "" : bancoDef(d.tipo)), forma: u.forma || (DJ[d.tipo].efecto ? "" : DJ[d.tipo].forma), venc: "", numero: "" }); await guardarDJ(d); render(); return true; }
+    case "deldjl": { const d = djSel(); d.lineas.splice(+b.dataset.i, 1); await guardarDJ(d); render(); return true; }
+    case "propuesta": {
+      const d = djSel(), D = DJ[d.tipo], hasta = S.djHasta || hoy(), ya = new Set(d.lineas.map(l => l.factura_id));
+      const fs = pendientesDe(D.lado).filter(f => (f.fecha_vencimiento || "") <= hasta && !ya.has(f.id)).sort((x, y) => (x.fecha_vencimiento || "").localeCompare(y.fecha_vencimiento || ""));
+      if (!fs.length) { alert("No hay facturas pendientes con vencimiento hasta " + hasta + "."); return true; }
+      fs.forEach(f => { const t = terPorId(f.tercero_id) || {}; d.lineas.push({ id: uid(), fecha: hoy(), tercero_id: f.tercero_id, factura_id: f.id, importe: pendienteF(f), desc: numExt(f) + " " + (t.nombre || ""), banco: D.efecto ? "" : bancoDef(d.tipo), forma: D.efecto ? "" : ((t.ficha || {}).pago || {}).forma || D.forma, venc: D.efecto ? (f.fecha_vencimiento >= hoy() ? f.fecha_vencimiento : hoy()) : "", numero: "" }); });
+      await guardarDJ(d); render(); return true;
+    }
+    case "validardj": { const e = validarDJ(djSel()); alert(e.length ? "Errores:\n" + e.join("\n") : "El diario es correcto."); return true; }
+    case "registrardj": await registrarDJ(djSel()); return true;
+    case "remcobro": case "remdesc": case "efcobrar": case "efimpago": await operarEfectos(a); return true;
+    case "efdeshacer": await deshacerEfectos(); return true;
+    case "selrem": S.selRem = id; render(); return true;
+    case "remcsv": { const r = CF("remesas").find(x => x.id === S.selRem), E = CF("efectos"); if (r) descargarCSV(r.num + ".csv", [["Remesa", "Efecto", "NIF", "Nombre", "Vencimiento", "Importe", "IBAN"], ...r.efectos.map(i => E.find(e => e.id === i)).filter(Boolean).map(e => { const t = terPorId(e.tercero_id) || {}; return [r.num, e.numero, t.cif || "", t.nombre || "", e.venc, nCSV(e.importe), ((t.ficha || {}).pago || {}).banco || ""]; })]); return true; }
+    case "aplicarex": { const R = casarExtracto().filter(r => r.p); S.concilMarcas = new Set(R.map(r => r.p.id)); S.concilFecha = S.extracto.hasta; S.concilSaldo = S.extracto.final === null ? "" : String(S.extracto.final).replace(".", ","); S.vista = "conciliar"; render(); return true; }
+    case "contabex": {
+      const m = S.extracto.movs[+b.dataset.i], cta = (document.querySelector(`[data-ex="${b.dataset.i}"]`) || {}).value.trim(), bk = bancoSel();
+      if (!esMov(cta)) { alert("Indique la cuenta de contrapartida (9 dígitos)."); return true; }
+      if (S.d.terceros.some(t => t.cuenta === cta)) { alert("Los cobros y pagos de clientes y proveedores se registran en sus diarios, para liquidar la factura."); return true; }
+      if (!confirm("¿Contabilizar " + eur(m.importe) + " del " + m.fecha + " contra " + cta + "?")) return true;
+      await asegurarCta(cta); const v = Math.abs(m.importe), entra = m.importe > 0;
+      await db.crearAsiento(S.emp.id, m.fecha, m.concepto || "Movimiento bancario", [{ cuenta: bk.cuenta, concepto: null, debe: entra ? v : 0, haber: entra ? 0 : v }, { cuenta: cta, concepto: null, debe: entra ? 0 : v, haber: entra ? v : 0 }], "extracto", "N43"); await recargar(); return true;
+    }
+    case "transferir": {
+      const v = i => document.getElementById(i).value.trim(), de = v("tr-de"), al = v("tr-a"), imp = r2(num(v("tr-imp"))), com = r2(num(v("tr-com") || 0)) || 0, fecha = v("tr-fecha");
+      if (!fecha || !esMov(de) || !esMov(al) || de === al || !(imp > 0)) { alert("Indique fecha, dos cuentas distintas de 9 dígitos e importe."); return true; }
+      if (!confirm("¿Registrar la transferencia de " + eur(imp) + " de " + de + " a " + al + "?")) return true;
+      const ap = [{ cuenta: al, concepto: null, debe: imp, haber: 0 }, ...(com ? [{ cuenta: EF.gastos, concepto: null, debe: com, haber: 0 }] : []), { cuenta: de, concepto: null, debe: 0, haber: r2(imp + com) }];
+      for (const p of ap) await asegurarCta(p.cuenta);
+      await db.crearAsiento(S.emp.id, fecha, v("tr-desc") || "Transferencia bancaria", ap, "transferencia", "TRB"); await recargar(); return true;
+    }
+    case "extcsv": { const D = datosExtracto(b.dataset.t); let s = D.ini; descargarCSV("extracto_" + D.t.codigo + ".csv", [["Fecha", "Asiento", "Descripción", "Debe", "Haber", "Saldo"], [D.d, "", "Saldo anterior", "", "", nCSV(D.ini)], ...D.movs.map(p => { s = r2(s + D.sg * (+p.debe - +p.haber)); return [p.a.fecha, asNum(p.a), p.a.concepto || "", nCSV(p.debe), nCSV(p.haber), nCSV(s)]; })]); return true; }
+    case "imprimir": window.print(); return true;
+    case "libcsv": { const D = datosLD(); descargarCSV("libro_diario_" + D.d + "_" + D.h + ".csv", [["Fecha", "Asiento", "Cuenta", "Nombre", "Descripción", "Debe", "Haber"], ...D.L.flatMap(x => x.ap.map(p => [x.a.fecha, asNum(x.a), p.cuenta, nombreCuenta(p.cuenta), p.concepto || x.a.concepto || "", nCSV(p.debe), nCSV(p.haber)]))]); return true; }
+    case "selper": S.selPerio = id; render(); return true;
+    case "addper": { const aid = document.getElementById("per-origen").value, as = S.d.asientos.find(x => x.id === aid), nombre = document.getElementById("per-nombre").value.trim() || as.concepto, dia = Math.min(28, Math.max(1, +document.getElementById("per-dia").value || 1)); await guardarCfg("periodicos", [...CF("periodicos"), { id: uid().slice(0, 8), nombre, dia, lineas: S.d.apuntes.filter(p => p.asiento_id === aid).map(p => ({ cuenta: p.cuenta, concepto: p.concepto || null, debe: +p.debe, haber: +p.haber })) }]); render(); return true; }
+    case "delper": if (confirm("¿Eliminar la plantilla? Los asientos ya generados se conservan.")) { await guardarCfg("periodicos", CF("periodicos").filter(x => x.id !== S.selPerio)); S.selPerio = null; render(); } return true;
+    case "genper": { const mes = mesAct(), P = CF("periodicos").filter(x => !S.d.asientos.some(a => a.documento === `PER-${x.id}-${mes}`)); if (!confirm("¿Generar " + P.length + " asiento(s) periódico(s) de " + mes + "?")) return true; for (const x of P) await db.crearAsiento(S.emp.id, mes + "-" + String(x.dia).padStart(2, "0"), x.nombre + " " + mes, x.lineas, "periodico", `PER-${x.id}-${mes}`); await recargar(); return true; }
+    case "cambiaper": { const C = new Set(CF("cerrados")), abre = C.has(id); if (confirm((abre ? "¿Abrir" : "¿Cerrar") + " el período " + id + "?")) { if (abre) C.delete(id); else C.add(id); await guardarCfg("cerrados", [...C].sort()); render(); } return true; }
+  }
+  return false;
+}
+async function cambioTes(t) {
+  const d = t.dataset;
+  if (d.djc !== undefined) { const x = CF("diariosPago").find(y => y.id === d.djc); await guardarDJ({ ...x, desc: t.value }); return true; }
+  if (d.dj !== undefined) {
+    const x = djSel(), l = x.lineas[+d.dj], k = d.k, D = DJ[x.tipo];
+    if (k === "tercero") { const c = t.value.trim() ? terPorCod(t.value) : null; if (t.value.trim() && (!c || c.tipo !== D.ter)) alert("No existe esa cuenta de " + (D.ter === "C" ? "cliente." : "proveedor.")); l.tercero_id = c && c.tipo === D.ter ? c.id : null; l.factura_id = null; l.importe = ""; }
+    else if (k === "factura_id") { l.factura_id = t.value || null; const f = S.d.facturas.find(y => y.id === t.value); if (f) { l.importe = pendienteF(f); if (!l.desc) l.desc = numExt(f); if (D.efecto && !l.venc) l.venc = f.fecha_vencimiento || ""; } }
+    else l[k] = k === "importe" ? (r2(num(t.value)) || 0) : t.value.trim();
+    await guardarDJ(x); if (["tercero", "factura_id", "importe"].includes(k)) render(); return true;
+  }
+  if (d.ef !== undefined) { const s = S.efSel || (S.efSel = new Set()); const v = ["ef-fecha", "ef-banco", "ef-gastos", "ef-int"].map(i => [i, (document.getElementById(i) || {}).value]); if (t.checked) s.add(d.ef); else s.delete(d.ef); render(); v.forEach(([i, x]) => { const e = document.getElementById(i); if (e && x !== undefined) e.value = x; }); return true; }
+  if (d.ex !== undefined) return true;
+  const simples = { "dj-mostrar": "djMostrar", "dj-hasta": "djHasta", "ant-fecha": "antFecha", "ext-ter": "extTer", "ext-desde": "extDesde", "ext-hasta": "extHasta", "per-mes": "perMes", "lib-desde": "libDesde", "lib-hasta": "libHasta" };
+  if (simples[t.id]) { S[simples[t.id]] = t.value; render(); return true; }
+  if (t.id === "car-tipo") { S.carteraTipo = t.value; S.carteraEst = ""; S.efSel = new Set(); render(); return true; }
+  if (t.id === "car-est") { S.carteraEst = t.value; S.efSel = new Set(); render(); return true; }
+  if (["per-origen", "per-nombre", "per-dia"].includes(t.id) || /^(tr|ef)-/.test(t.id || "")) return true;
+  if (t.id === "n43") {
+    const file = t.files[0]; if (!file) return true;
+    const X = leerN43(new TextDecoder("windows-1252").decode(await file.arrayBuffer()));
+    if (!X.length) { alert("El fichero no parece un cuaderno Norma 43."); return true; }
+    if (X.length > 1) alert("El fichero tiene " + X.length + " cuentas; se carga la primera con movimientos.");
+    S.extracto = X.find(x => x.movs.length) || X[0]; render(); return true;
+  }
   return false;
 }
 
@@ -2010,6 +2343,7 @@ document.addEventListener("change", async e => {
     if (cambioInv(t)) return;
     if (await cambioImp(t)) return;
     if (cambioFin(t)) return;
+    if (await cambioTes(t)) return;
     if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
     else if (t.dataset.tf !== undefined) {
       setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.value);
@@ -2024,7 +2358,7 @@ document.addEventListener("change", async e => {
     else if (t.id === "emp") {
       const e2 = S.empresas.find(x => x.id === t.value);
       try { if (e2.almacen === "drive") await abrirDrive(e2.reg); } catch (err) { render(); throw err; }
-      S.emp = e2; S.libro = null; await recargar();
+      S.emp = e2; S.libro = null; S.djAbierto = null; S.efSel = null; S.extracto = null; S.concilMarcas = null; S.bancoSel = ""; await recargar();
     }
     else if (t.id === "ej") { S.ej = +t.value; render(); }
     else if (t.id === "cm") { S.filtroCta = t.value; render(); }
@@ -2115,7 +2449,8 @@ document.addEventListener("click", async e => {
     if (await accionInv(a, b)) return;
     if (await accionImp(a, b)) return;
     if (await accionFin(a, b)) return;
-    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; S.ped = null; S.artEdit = null; S.almEdit = null; S.ajuste = null; S.cfgEdit = null; S.afEdit = null; S.bajaAF = false; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
+    if (await accionTes(a, b)) return;
+    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; S.ped = null; S.artEdit = null; S.almEdit = null; S.ajuste = null; S.cfgEdit = null; S.afEdit = null; S.bajaAF = false; S.djAbierto = null; S.efSel = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
     else if (a === "nav") { S.nav = !S.nav; if (S.nav) S.navMod = moduloDe(S.vista) || S.navMod; render(); }
     else if (a === "navmod") { S.navMod = b.dataset.id; render(); }
     else if (a === "navsec") { S.navCerr[b.dataset.id] = !S.navCerr[b.dataset.id]; render(); }
