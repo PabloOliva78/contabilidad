@@ -174,7 +174,7 @@ const db = new Proxy({}, { get: (_, m) => (...a) => { if (m === "empresas") retu
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, glDesde: "", glHasta: "", glNivel: "", glCta: "", glOrigen: "", finTipo: "", selTA: null, dimId: "", dimSolo: "", asgDest: null, asgForm: null, selAsg: null, selPdf: null, pdfMes: "", conEmps: null, conExcl: "", consol: null, fsEstado: "", fsDias: "", fsFiltro: "", fsMarcas: null, selFS: null, selPlant: null, selPeriodica: null, fsHasta: "", rectTipo: "", liqTer: "", liqMarcas: null, imprFact: "", selCred: null, djAbierto: null, djSel: null, djMostrar: "", djHasta: "", efSel: null, carteraTipo: "", carteraEst: "", selRem: null, extracto: null, antFecha: "", extTer: "", extDesde: "", extHasta: "", perMes: "", selPerio: null, libDesde: "", libHasta: "", afEdit: null, selAF: null, bajaAF: false, amortHasta: "", bancoSel: "", concilFecha: "", concilSaldo: "", concilMarcas: null, fechaRegul: "", selRegul: null, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, albForm: null, albMarcas: null, selAlb: null, albValorado: false, glDesde: "", glHasta: "", glNivel: "", glCta: "", glOrigen: "", finTipo: "", selTA: null, dimId: "", dimSolo: "", asgDest: null, asgForm: null, selAsg: null, selPdf: null, pdfMes: "", conEmps: null, conExcl: "", consol: null, fsEstado: "", fsDias: "", fsFiltro: "", fsMarcas: null, selFS: null, selPlant: null, selPeriodica: null, fsHasta: "", rectTipo: "", liqTer: "", liqMarcas: null, imprFact: "", selCred: null, djAbierto: null, djSel: null, djMostrar: "", djHasta: "", efSel: null, carteraTipo: "", carteraEst: "", selRem: null, extracto: null, antFecha: "", extTer: "", extDesde: "", extHasta: "", perMes: "", selPerio: null, libDesde: "", libHasta: "", afEdit: null, selAF: null, bajaAF: false, amortHasta: "", bancoSel: "", concilFecha: "", concilSaldo: "", concilMarcas: null, fechaRegul: "", selRegul: null, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -273,11 +273,14 @@ const NAV = [
     { n: "Consultas e informes", it: [["aftrans", "Transacciones de activos fijos"], ["afcuadro", "Cuadro de amortización"]] },
     { n: "Configurar", it: [["grupoact", "Grupos de activos fijos"]] }] },
   { g: "Ventas y marketing", sec: [
-    { n: "Pedidos de venta", it: [["presupv", "Presupuestos de ventas"], ["pventa", "Todos los pedidos de venta"]] }] },
+    { n: "Pedidos de venta", it: [["presupv", "Presupuestos de ventas"], ["pventa", "Todos los pedidos de venta"]] },
+    { n: "Albaranes y facturas", it: [["albv", "Albaranes de venta (entregas)"], ["imprfact", "Imprimir facturas"]] }] },
   { g: "Compras y abastecimiento", sec: [
-    { n: "Pedidos de compra", it: [["cotiz", "Solicitudes de cotización"], ["pcompra", "Todos los pedidos de compra"]] }] },
+    { n: "Pedidos de compra", it: [["cotiz", "Solicitudes de cotización"], ["pcompra", "Todos los pedidos de compra"]] },
+    { n: "Recepciones", it: [["albc", "Albaranes de compra (recepciones)"]] }] },
   { g: "Gestión del inventario", sec: [
     { n: "Artículos", it: [["articulos", "Todos los artículos"]] },
+    { n: "Entradas y salidas", it: [["albc", "Albaranes de compra (recepciones)"], ["albv", "Albaranes de venta (entregas)"]] },
     { n: "Consultas e informes", sub: [{ n: "Consultas", it: [["existencias", "Existencias disponibles"], ["movinv", "Transacciones de inventario"]] }] },
     { n: "Periódico", it: [["regexist", "Regularización de existencias"]] },
     { n: "Configurar", sub: [{ n: "Almacenes", it: [["almacenes", "Almacenes"]] }] }] },
@@ -291,7 +294,7 @@ const NAV = [
 ];
 const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes", regexist: "Regularización de existencias", cierre: "Cierre del ejercicio", bancos: "Cuentas bancarias", movbanco: "Transacciones bancarias", conciliar: "Conciliación bancaria", activos: "Activos fijos", amort: "Propuesta de amortización", grupoact: "Grupos de activos fijos", dpago: "Diario de pagos a proveedores", dcobro: "Diario de pagos de clientes", dpagare: "Diario de creación de pagarés", dletra: "Diario de creación de letras de cambio", cartera: "Cartera de efectos", remesas: "Remesas", extractos: "Extractos bancarios", transfer: "Transferencias bancarias", prevision: "Previsión de flujo de efectivo", antcli: "Antigüedad de saldos de clientes", antprov: "Antigüedad de saldos de proveedores", extcli: "Extracto de cuenta de cliente", extprov: "Extracto de cuenta de proveedor", periodicos: "Asientos periódicos", librodiario: "Libro diario", calendario: "Calendario del libro mayor", aftrans: "Transacciones de activos fijos", afcuadro: "Cuadro de amortización", dletraliq: "Diario de liquidación de letra de cambio", dletraenv: "Diario de envíos", saldosfecha: "Saldo de comprobación", transasiento: "Transacciones de asiento", extctas: "Extracto por cuenta principal", financieros: "Informes financieros", extdim: "Extracto de dimensión", pmp: "Período medio de pago a proveedores", consolid: "Consolidación", periodif: "Esquemas de acumulación", asignaciones: "Diarios de asignaciones", comprobarserie: "Comprobar serie de asientos", dimensiones: "Dimensiones financieras", asigdim: "Asignar dimensiones", fservicios: "Todas las facturas de servicios", fsperiod: "Facturas periódicas", plantfs: "Plantillas de factura de servicios", letdiario: "Diario de letras de cambio", letabiertas: "Informe de letras abiertas", letimpagadas: "Letras impagadas", letfactura: "Relación letra-factura", letestad: "Estadísticas de letra de cambio", dletraimp: "Diario de impago de letras de cambio", dletraren: "Diario de renegociación de letras de cambio", dpagliq: "Diario de liquidación de pagarés", dpagren: "Diario de renegociación de pagarés", rectif: "Facturas rectificativas", liquidar: "Liquidar transacciones", imprfact: "Imprimir facturas", credito: "Crédito y cobros", presupv: "Presupuestos de ventas", cotiz: "Solicitudes de cotización", empresa: "Datos de la empresa", presupuesto: "Control presupuestario" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes", regexist: "Regularización de existencias", cierre: "Cierre del ejercicio", bancos: "Cuentas bancarias", movbanco: "Transacciones bancarias", conciliar: "Conciliación bancaria", activos: "Activos fijos", amort: "Propuesta de amortización", grupoact: "Grupos de activos fijos", dpago: "Diario de pagos a proveedores", dcobro: "Diario de pagos de clientes", dpagare: "Diario de creación de pagarés", dletra: "Diario de creación de letras de cambio", cartera: "Cartera de efectos", remesas: "Remesas", extractos: "Extractos bancarios", transfer: "Transferencias bancarias", prevision: "Previsión de flujo de efectivo", antcli: "Antigüedad de saldos de clientes", antprov: "Antigüedad de saldos de proveedores", extcli: "Extracto de cuenta de cliente", extprov: "Extracto de cuenta de proveedor", periodicos: "Asientos periódicos", librodiario: "Libro diario", calendario: "Calendario del libro mayor", aftrans: "Transacciones de activos fijos", afcuadro: "Cuadro de amortización", dletraliq: "Diario de liquidación de letra de cambio", dletraenv: "Diario de envíos", albv: "Albaranes de venta (entregas)", albc: "Albaranes de compra (recepciones)", saldosfecha: "Saldo de comprobación", transasiento: "Transacciones de asiento", extctas: "Extracto por cuenta principal", financieros: "Informes financieros", extdim: "Extracto de dimensión", pmp: "Período medio de pago a proveedores", consolid: "Consolidación", periodif: "Esquemas de acumulación", asignaciones: "Diarios de asignaciones", comprobarserie: "Comprobar serie de asientos", dimensiones: "Dimensiones financieras", asigdim: "Asignar dimensiones", fservicios: "Todas las facturas de servicios", fsperiod: "Facturas periódicas", plantfs: "Plantillas de factura de servicios", letdiario: "Diario de letras de cambio", letabiertas: "Informe de letras abiertas", letimpagadas: "Letras impagadas", letfactura: "Relación letra-factura", letestad: "Estadísticas de letra de cambio", dletraimp: "Diario de impago de letras de cambio", dletraren: "Diario de renegociación de letras de cambio", dpagliq: "Diario de liquidación de pagarés", dpagren: "Diario de renegociación de pagarés", rectif: "Facturas rectificativas", liquidar: "Liquidar transacciones", imprfact: "Imprimir facturas", credito: "Crédito y cobros", presupv: "Presupuestos de ventas", cotiz: "Solicitudes de cotización", empresa: "Datos de la empresa", presupuesto: "Control presupuestario" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -1338,7 +1341,9 @@ async function registrarMovPed() {
     ms.push({ id: uid(), empresa_id: S.emp.id, fecha, articulo_id: a.id, almacen_id: alm, tipo: cli ? "Entrega" : "Recepción", cantidad: cli ? -q : q, coste: Math.round((cli ? costeMedio(a) : netoPed(p, l)) * 10000) / 10000, pedido_id: p.id, linea_id: l.id, documento: doc, notas: null, creado: new Date().toISOString() });
   }
   if (!ms.length) return alert(cli ? "No hay nada que entregar." : "No hay nada que recibir.");
-  await db.guardarMovs(ms); S.d = await db.cargar(S.emp.id); S.ped.ls.forEach(l => { l.ahora = undefined; }); render();
+  await db.guardarMovs(ms); await guardarAlb({ doc, tipo: p.tipo, num: siguienteAlb(p.tipo), tercero_id: p.tercero_id, externo: "", transporte: (p.ficha || {}).modo || "", matricula: "", bultos: "", notas: "", det: {} });
+  S.d = await db.cargar(S.emp.id); S.ped.ls.forEach(l => { l.ahora = undefined; }); render();
+  alert("Registrado el albarán " + albaran(p.tipo, doc).num + ". Lo tiene en Albaranes, donde puede descargar el PDF.");
 }
 async function deshacerMovPed() {
   const { p } = S.ped, docs = docsMov(p), ult = docs[docs.length - 1]; if (!ult) return;
@@ -1437,6 +1442,7 @@ async function accionInv(a, b) { // clics del inventario y los pedidos; devuelve
     case "selmov": S.selMov = id; render(); return true;
     case "eliminarmov": {
       const m = S.d.movinv.find(x => x.id === S.selMov); if (!m || m.pedido_id) return true;
+      if (m.tipo === "Entrega" || m.tipo === "Recepción") { alert("Es un movimiento de albarán: anúlelo desde la pantalla de Albaranes."); return true; }
       const ids = S.d.movinv.filter(x => x.documento === m.documento && !x.pedido_id).map(x => x.id);
       if (confirm("¿Eliminar " + m.documento + " (" + ids.length + " movimiento" + (ids.length > 1 ? "s" : "") + ")?")) { await db.borrarMovs(ids); S.selMov = null; await recargar(); }
       return true;
@@ -2411,14 +2417,15 @@ function documento({ titulo, numero, fecha, venc, ter, lineas, tot, ret, forma, 
    <div class="doc-tot"><table>${[...porIva].map(([p, b]) => `<tr><td>Base ${String(p).replace(".", ",")} %</td><td class="n">${eur(b)}</td><td>IVA</td><td class="n">${eur(b * p / 100)}</td></tr>`).join("")}${tot.rec ? `<tr><td colspan="3">Recargo de equivalencia</td><td class="n">${eur(tot.rec)}</td></tr>` : ""}${ret ? `<tr><td colspan="3">Retención IRPF</td><td class="n">−${eur(ret)}</td></tr>` : ""}<tr class="tot"><td colspan="3">TOTAL ${ret ? "A PERCIBIR" : ""}</td><td class="n">${eur(r2(tot.total - (ret || 0)))} €</td></tr></table></div>
    ${lineas.some(l => l.auto) ? "<p>Operación con inversión del sujeto pasivo.</p>" : ""}${notas ? `<p>${esc(notas)}</p>` : ""}${cliente && forma ? `<p>Forma de pago: ${esc(forma)}${E.iban ? " · IBAN " + esc(E.iban) : ""}</p>` : cliente && E.iban ? `<p>IBAN ${esc(E.iban)}</p>` : ""}${E.pie ? `<p>${esc(E.pie)}</p>` : ""}<p class="doc-pie">${esc(E.registro || "")}</p></div>`;
 }
-function docFactura(f) {
+function datosDocFactura(f) {
   const t = terPorId(f.tercero_id) || {}, ls = lineasF(f);
-  return documento({ titulo: esRect(f) ? "FACTURA RECTIFICATIVA" : "FACTURA", numero: f.numero, fecha: f.fecha_emision, venc: f.fecha_vencimiento, ter: t, cliente: true, forma: ((t.ficha || {}).pago || {}).forma, notas: esRect(f) ? f.notas : "", tot: totalesF(ls), ret: retF(f),
-    lineas: ls.map(l => ({ desc: l.descripcion || "", cant: +l.cantidad, precio: +l.precio, pct: +(codLinea(f, l).pct || 0), base: r2(l.cantidad * l.precio), auto: l.auto })) });
+  return { titulo: esRect(f) ? "FACTURA RECTIFICATIVA" : "FACTURA", numero: f.numero, fecha: f.fecha_emision, venc: f.fecha_vencimiento, ter: t, cliente: true, forma: ((t.ficha || {}).pago || {}).forma, notas: esRect(f) ? f.notas : "", tot: totalesF(ls), ret: retF(f),
+    lineas: ls.map(l => ({ desc: l.descripcion || "", cant: +l.cantidad, precio: +l.precio, pct: +(codLinea(f, l).pct || 0), base: r2(l.cantidad * l.precio), auto: l.auto })) };
 }
+const docFactura = f => documento(datosDocFactura(f));
 V.imprfact = () => {
   const L = S.d.facturas.filter(f => f.tipo === "V" && estadoF(f) === "Registrado").sort((a, b) => b.numero.localeCompare(a.numero)), f = L.find(x => x.id === S.imprFact) || L[0];
-  return pagina("Imprimir facturas", `<button class="p" data-a="imprimir" ${f ? "" : "disabled"}>Imprimir / guardar PDF</button>`, f ? docFactura(f) : `<p>No hay facturas de cliente registradas.</p>`, { tabs: ["Vista previa"], filtros: f ? `<label>Factura<select id="impr-fact">${L.map(x => `<option value="${x.id}" ${x.id === f.id ? "selected" : ""}>${esc(x.numero)} · ${esc((terPorId(x.tercero_id) || {}).nombre || "")}</option>`).join("")}</select></label>` : "" });
+  return pagina("Imprimir facturas", `<button class="p" data-a="pdffact" ${f ? "" : "disabled"}>Descargar PDF</button>` + btn("pdffacttodas", "PDF de todas las del ejercicio", "", !f) + btn("imprimir", "Imprimir", "", !f),f ? docFactura(f) : `<p>No hay facturas de cliente registradas.</p>`, { tabs: ["Vista previa"], filtros: f ? `<label>Factura<select id="impr-fact">${L.map(x => `<option value="${x.id}" ${x.id === f.id ? "selected" : ""}>${esc(x.numero)} · ${esc((terPorId(x.tercero_id) || {}).nombre || "")}</option>`).join("")}</select></label>` : "" });
 };
 
 /* Presupuestos de venta y solicitudes de cotización: pedidos en estado "presupuesto" */
@@ -2430,10 +2437,14 @@ function vistaPresup(tipo) {
 V.presupv = () => vistaPresup("V"); V.cotiz = () => vistaPresup("C");
 V.imprpres = () => {
   const p = S.d.pedidos.find(x => x.id === S.selPed); if (!p) return pagina("Vista de impresión", "", "<p>Elija un presupuesto.</p>");
-  const ls = plineasDe(p), cli = p.tipo === "V";
-  return pagina("Vista de impresión", `<button class="p" data-a="imprimir">Imprimir / guardar PDF</button>` + btn("vista", "Volver", `data-v="${cli ? "presupv" : "cotiz"}"`), documento({ titulo: cli ? "PRESUPUESTO" : "SOLICITUD DE COTIZACIÓN", numero: p.numero, fecha: p.fecha, venc: p.fecha_entrega, ter: terPorId(p.tercero_id) || {}, tot: totalesPed(p, ls), notas: (p.ficha || {}).notas, cliente: false,
-    lineas: ls.map(l => { const c = CODIGO[l.cod_iva] || {}; return { desc: l.descripcion || "", cant: +l.cantidad, precio: r2(netoPed(p, l)), pct: +(c.pct || 0), base: importeL(p, l), auto: c.tipo === "ue" || c.tipo === "isp" }; }) }), { tabs: ["Vista previa"] });
+  const cli = p.tipo === "V";
+  return pagina("Vista de impresión", `<button class="p" data-a="pdfpres">Descargar PDF</button>` + btn("imprimir", "Imprimir") + btn("vista", "Volver", `data-v="${cli ? "presupv" : "cotiz"}"`), documento(datosDocPres(p)), { tabs: ["Vista previa"] });
 };
+function datosDocPres(p) {
+  const ls = plineasDe(p), cli = p.tipo === "V";
+  return { titulo: cli ? "PRESUPUESTO" : "SOLICITUD DE COTIZACIÓN", numero: p.numero, fecha: p.fecha, venc: p.fecha_entrega, ter: terPorId(p.tercero_id) || {}, tot: totalesPed(p, ls), notas: (p.ficha || {}).notas, cliente: false,
+    lineas: ls.map(l => { const c = CODIGO[l.cod_iva] || {}; return { desc: l.descripcion || "", cant: +l.cantidad, precio: r2(netoPed(p, l)), pct: +(c.pct || 0), base: importeL(p, l), auto: c.tipo === "ue" || c.tipo === "isp" }; }) };
+}
 
 /* Presupuesto contable (control presupuestario) */
 SEED.presupuestos = () => [];
@@ -2812,6 +2823,171 @@ async function cambioGL(t) {
   return ["rev-fecha", "dim-valor", "dim-cta", "dim-def", "pdf-nombre", "pdf-bal", "pdf-res", "pdf-total", "pdf-ini", "pdf-meses"].includes(t.id);
 }
 
+/* ---------------- Albaranes de entrada y salida (recepciones y entregas) ---------------- */
+// Un albarán es el conjunto de movimientos de inventario de un mismo documento; sus datos de cabecera (número, transporte, lote…) van aparte.
+SEED.albaranes = () => [];
+const TIPO_MOV = { V: "Entrega", C: "Recepción" };
+const siguienteAlb = tipo => { const pf = tipo === "V" ? "AV" : "AC"; let m = 0; CF("albaranes").forEach(h => { const k = new RegExp("^" + pf + "(\\d+)$").exec(h.num); if (k) m = Math.max(m, +k[1]); }); return pf + String(m + 1).padStart(6, "0"); };
+const cabAlb = (tipo, doc) => CF("albaranes").find(h => h.tipo === tipo && h.doc === doc);
+const guardarAlb = h => guardarCfg("albaranes", [...CF("albaranes").filter(x => !(x.tipo === h.tipo && x.doc === h.doc)), h]);
+function albaran(tipo, doc) {
+  const ms = S.d.movinv.filter(m => m.documento === doc && m.tipo === TIPO_MOV[tipo]); if (!ms.length) return null;
+  const h = cabAlb(tipo, doc) || { doc, tipo, num: doc, det: {} }, ped = S.d.pedidos.find(p => p.id === ms[0].pedido_id);
+  const lineas = ms.map(m => { const a = artPorId(m.articulo_id) || {}, pl = S.d.plineas.find(x => x.id === m.linea_id), det = (h.det || {})[m.id] || {};
+    return { m, a, pl, q: Math.abs(+m.cantidad), desc: det.desc || (pl && pl.descripcion) || a.nombre || "", lote: det.lote || "", precio: pl && ped ? netoPed(ped, pl) : +(det.precio || 0), cod: pl ? pl.cod_iva : det.cod, rec: pl ? pl.cod_rec : det.rec }; });
+  const fac = S.d.facturas.find(f => f.id === h.factura), porPedido = !fac && ped && lineas.every(l => l.pl && facturadoL(l.pl) >= recibidoL(l.pl));
+  return { doc, tipo, h, num: h.num, fecha: ms[0].fecha, ped, ter: terPorId(h.tercero_id || (ped && ped.tercero_id)) || {}, lineas, fac, estado: fac ? "Facturado " + fac.numero : porPedido ? "Facturado" : "Pendiente de facturar", pendiente: !fac && !porPedido };
+}
+const albaranes = tipo => [...new Set(S.d.movinv.filter(m => m.tipo === TIPO_MOV[tipo]).map(m => m.documento))].map(d => albaran(tipo, d)).sort((a, b) => b.fecha.localeCompare(a.fecha) || b.num.localeCompare(a.num));
+const albNuevo = tipo => ({ tipo, tercero: "", fecha: hoy(), almacen: (S.d.almacenes[0] || {}).id || "", externo: "", transporte: "", matricula: "", bultos: "", notas: "", lineas: [{ art: "", cant: "", precio: "", lote: "" }] });
+function vistaAlbaranes(tipo) {
+  const cli = tipo === "V", N = S.albForm && S.albForm.tipo === tipo ? S.albForm : null, L = albaranes(tipo), M = S.albMarcas || (S.albMarcas = new Set()), sel = L.find(a => a.doc === S.selAlb), marc = L.filter(a => M.has(a.doc));
+  const titulo = cli ? "Albaranes de venta (entregas)" : "Albaranes de compra (recepciones)";
+  if (N) {
+    const ters = S.d.terceros.filter(t => t.tipo === (cli ? "C" : "P"));
+    const c = (et, k, extra = "") => `<label>${et}<br><input data-al="${k}" value="${esc(N[k] || "")}" ${extra}></label>`;
+    return pagina(titulo, `<button class="p" data-a="registraralb">Registrar ${cli ? "entrega" : "recepción"}</button>` + btn("cancelaralb", "Cancelar"), `<datalist id="dlter">${ters.map(t => `<option value="${esc(t.codigo)}">${esc(t.nombre)}</option>`).join("")}</datalist><datalist id="dlart">${S.d.articulos.filter(a => a.tipo !== "Servicio" && a.activo !== false).map(a => `<option value="${esc(a.codigo)}">${esc(a.nombre)}</option>`).join("")}</datalist>
+      <div class="card"><div class="row">${c(cli ? "Cliente" : "Proveedor", "tercero", 'list="dlter" size="12"')}<label>Fecha<br><input type="date" data-al="fecha" value="${N.fecha}"></label><label>Almacén<br><select data-al="almacen">${optsHtml(S.d.almacenes.map(a => [a.id, a.codigo + " · " + a.nombre]), N.almacen)}</select></label>${cli ? "" : c("N.º albarán del proveedor", "externo", 'size="16"')}${c("Transporte", "transporte", 'size="18"')}${c("Matrícula", "matricula", 'size="10"')}${c("Bultos", "bultos", 'size="5"')}${c("Observaciones", "notas", 'size="34"')}</div></div>
+      <div class="lista"><table class="editable"><tr><th>Artículo</th><th>Nombre</th><th class="n">Cantidad</th><th>Unidad</th><th>Lote</th><th class="n">Precio unitario</th><th class="n">Existencias</th><th></th></tr>${N.lineas.map((l, i) => { const a = artPorCod(l.art) || null; const inp = (k, s) => `<input data-all="${i}" data-k="${k}" size="${s}" value="${esc(l[k] ?? "")}" ${k === "art" ? 'list="dlart"' : ""}>`; return `<tr><td>${inp("art", 10)}</td><td>${esc(a ? a.nombre : "")}</td><td>${inp("cant", 8)}</td><td>${esc(a ? a.unidad : "")}</td><td>${inp("lote", 14)}</td><td>${inp("precio", 9)}</td><td class="n">${a ? q3(stockArt(a.id, N.almacen)) : ""}</td><td><button class="d" data-a="delalbl" data-i="${i}">✕</button></td></tr>`; }).join("")}</table><div class="row" style="margin-top:.5rem"><button data-a="addalbl">+ Línea</button></div></div>`, { tabs: ["Líneas"], vista: "Nuevo albarán" });
+  }
+  const pendientes = S.d.pedidos.filter(p => p.tipo === tipo && !["cancelado", "presupuesto"].includes(p.estado)).map(p => ({ p, q: plineasDe(p).filter(l => !esServ(l)).reduce((s, l) => s + Math.max(0, (+l.cantidad || 0) - recibidoL(l)), 0) })).filter(x => x.q > 0);
+  const filas = L.map(a => `<tr data-sel class="${sel && sel.doc === a.doc ? "sel" : ""}" data-a="selalb" data-id="${esc(a.doc)}"><td><input type="checkbox" data-alm="${esc(a.doc)}" ${M.has(a.doc) ? "checked" : ""}></td><td>${esc(a.num)}</td><td>${a.fecha}</td><td>${esc(a.ter.codigo || "")}</td><td>${esc(a.ter.nombre || "")}</td><td>${esc(a.ped ? a.ped.numero : "")}</td>${cli ? "" : `<td>${esc(a.h.externo || "")}</td>`}<td class="n">${q3(a.lineas.reduce((s, l) => s + l.q, 0))}</td><td>${a.estado}</td></tr>`).join("");
+  const det = sel ? `<h3>${esc(sel.num)}</h3><dl>${sel.lineas.map(l => `<dt>${esc(l.a.codigo || "")} ${esc(l.desc)}${l.lote ? " · lote " + esc(l.lote) : ""}</dt><dd>${q3(l.q)} ${esc(l.a.unidad || "")}</dd>`).join("")}</dl><h3 style="margin-top:1rem">Datos del albarán</h3>${[...(cli ? [] : [["externo", "N.º albarán del proveedor"]]), ["transporte", "Transporte"], ["matricula", "Matrícula"], ["bultos", "Bultos"], ["notas", "Observaciones"]].map(([k, et]) => `<label class="fld">${et}<input data-alh="${k}" value="${esc(sel.h[k] || "")}"></label>`).join("")}${sel.lineas.map(l => `<label class="fld">Lote · ${esc(l.a.codigo || "")}<input data-allote="${l.m.id}" value="${esc(l.lote)}"></label>`).join("")}` : `<p style="color:var(--tx2)">Seleccione un albarán.</p>`;
+  const acc = btn("nuevoalb", "+ Nuevo albarán", `data-t="${tipo}"`) + SEP + `<button class="p" data-a="pdfalb" data-t="${tipo}" ${marc.length || sel ? "" : "disabled"}>Descargar PDF${marc.length > 1 ? " (" + marc.length + ")" : ""}</button>` + btn("facturaralb", "Facturar" + (marc.length ? " (" + marc.length + ")" : ""), `data-t="${tipo}"`, !marc.length || marc.some(a => !a.pendiente)) + SEP + btn("anularalb", "Anular albarán", `data-t="${tipo}"`, !sel || !sel.pendiente);
+  return pagina(titulo, acc, `<div class="pagina"><div class="lista"><table><tr><th></th><th>Albarán</th><th>Fecha</th><th>Cuenta</th><th>Nombre</th><th>Pedido</th>${cli ? "" : "<th>Albarán del proveedor</th>"}<th class="n">Cantidad</th><th>Estado</th></tr>${filas || `<tr><td colspan="9" class="vacio">No hay albaranes todavía.</td></tr>`}</table>
+    <h3 style="margin-top:1rem">Pedidos pendientes de ${cli ? "entregar" : "recibir"}</h3>${tablaGL(["Pedido", "Cuenta", "Nombre", "Fecha prevista", "#Cantidad pendiente", ""], pendientes.map(({ p, q }) => { const t = terPorId(p.tercero_id) || {}; return `<tr><td>${esc(p.numero)}</td><td>${esc(t.codigo || "")}</td><td>${esc(t.nombre || "")}</td><td>${p.fecha_entrega || ""}</td><td class="n">${q3(q)}</td><td><button data-a="recepcionar" data-id="${p.id}">${cli ? "Entregar" : "Recepcionar"}</button></td></tr>`; }).join(""), "No hay pedidos pendientes.")}</div><aside class="factbox">${det}</aside></div>`,
+    { tabs: ["Albaranes"], filtros: `<label class="chk"><input type="checkbox" id="alb-valorado" ${S.albValorado ? "checked" : ""}> PDF valorado (con precios)</label>` });
+}
+V.albv = () => vistaAlbaranes("V"); V.albc = () => vistaAlbaranes("C");
+async function registrarAlbDirecto() {
+  const N = S.albForm, cli = N.tipo === "V", t = terPorCod(N.tercero || "");
+  if (!t || t.tipo !== (cli ? "C" : "P")) return alert("Indique " + (cli ? "el cliente." : "el proveedor."));
+  if (!N.fecha || !N.almacen) return alert("Indique la fecha y el almacén.");
+  const L = N.lineas.filter(l => l.art || l.cant); if (!L.length) return alert("El albarán no tiene líneas.");
+  const sale = new Map();
+  for (const l of L) { const a = artPorCod(l.art || ""), q = r3(+num(l.cant)); if (!a || a.tipo === "Servicio") return alert("Artículo no válido: " + (l.art || "(vacío)")); if (!(q > 0)) return alert("La cantidad de " + a.codigo + " debe ser mayor que cero."); if (cli) sale.set(a.id, (sale.get(a.id) || 0) + q); }
+  for (const [aid, q] of sale) if (stockArt(aid, N.almacen) < q && !confirm("Las existencias de " + artPorId(aid).codigo + " en ese almacén quedarán en negativo. ¿Continuar?")) return;
+  const numAlb = siguienteAlb(N.tipo), det = {}, ms = L.map(l => { const a = artPorCod(l.art), q = r3(+num(l.cant)), precio = String(l.precio ?? "") === "" ? +(cli ? a.precio_venta : a.precio_compra) || 0 : +num(l.precio) || 0, cod = codArtPed(a, t, N.tipo), id = uid();
+    det[id] = { desc: a.nombre, lote: (l.lote || "").trim(), precio, cod, rec: cli && aplicaRec(t) ? recDeCodigo(cod) : "" };
+    return { id, empresa_id: S.emp.id, fecha: N.fecha, articulo_id: a.id, almacen_id: N.almacen, tipo: TIPO_MOV[N.tipo], cantidad: cli ? -q : q, coste: Math.round((cli ? costeMedio(a) : precio) * 10000) / 10000, pedido_id: null, linea_id: null, documento: numAlb, notas: null, creado: new Date().toISOString() }; });
+  await db.guardarMovs(ms); await guardarAlb({ doc: numAlb, tipo: N.tipo, num: numAlb, tercero_id: t.id, externo: N.externo, transporte: N.transporte, matricula: N.matricula, bultos: N.bultos, notas: N.notas, det });
+  S.albForm = null; S.selAlb = numAlb; await recargar();
+}
+async function facturarAlbaranes(tipo) {
+  const L = albaranes(tipo).filter(a => S.albMarcas.has(a.doc) && a.pendiente).reverse(); if (!L.length) return;
+  if (new Set(L.map(a => a.ter.id)).size !== 1) return alert("Marque albaranes de un mismo " + (tipo === "V" ? "cliente." : "proveedor."));
+  const cli = tipo === "V", t = L[0].ter, usado = new Map(), fl = [];
+  for (const a of L) for (const l of a.lineas) {
+    let q = l.q; if (l.pl) { const disp = r3(recibidoL(l.pl) - facturadoL(l.pl) - (usado.get(l.pl.id) || 0)); q = r3(Math.min(q, disp)); if (q <= 0) continue; usado.set(l.pl.id, r3((usado.get(l.pl.id) || 0) + q)); }
+    const c = CODIGO[l.cod] || CODIGO[codDefecto(t, tipo)];
+    fl.push({ id: null, descripcion: l.desc + " (albarán " + a.num + (l.lote ? ", lote " + l.lote : "") + ")", cuenta: (cli ? l.a.cuenta_venta : l.a.cuenta_compra) || primeraCuenta(cli ? "700" : "600"), cantidad: q, precio: Math.round(l.precio * 10000) / 10000, iva: c.pct, cod: c.cod, rec: l.rec || "", auto: c.tipo === "ue" || c.tipo === "isp", pedido_linea_id: l.pl ? l.pl.id : null, tocado: true });
+  }
+  if (!fl.length) return alert("No queda nada pendiente de facturar en esos albaranes.");
+  if (!confirm("¿Crear una factura de " + t.nombre + " con " + L.length + " albarán(es)?")) return;
+  const peds = new Set(L.map(a => (a.ped || {}).id || "")), p = L[0].ped;
+  const f = { id: uid(), empresa_id: S.emp.id, tipo, numero: siguienteFact(tipo), tercero_id: t.id, num_externo: "", fecha_emision: hoy(), fecha_registro: hoy(), fecha_iva: hoy(), fecha_vencimiento: calcVenc(t, hoy()), vencAuto: true, estado: "abierto", asiento_id: null, notas: "Albaranes " + L.map(a => a.num).join(", "), retencion_tipo: "", retencion_pct: 0, pedido_id: peds.size === 1 && p ? p.id : null };
+  const rc = (p && (p.ficha || {}).cod_ret) || (t.ficha || {}).cod_ret; if (rc) aplicarRet(f, rc);
+  S.fact = { f, ls: fl }; await guardarFactura();
+  for (const a of L) await guardarAlb({ ...a.h, num: a.num, tercero_id: t.id, factura: f.id });
+  S.albMarcas = new Set(); S.vista = cli ? "fventa" : "fcompra"; S.selFact = f.id; await recargar();
+}
+async function anularAlbaran(tipo) {
+  const a = albaran(tipo, S.selAlb); if (!a || !a.pendiente) return;
+  for (const l of a.lineas) if (l.pl) { const q = a.lineas.filter(x => x.pl && x.pl.id === l.pl.id).reduce((s, x) => s + x.q, 0); if (r3(recibidoL(l.pl) - q) < facturadoL(l.pl)) return alert("Parte de este albarán ya está facturada en su pedido. Elimine antes la factura."); }
+  if (!confirm("¿Anular el albarán " + a.num + "? Se eliminan sus movimientos de inventario.")) return;
+  await db.borrarMovs(a.lineas.map(l => l.m.id)); await guardarCfg("albaranes", CF("albaranes").filter(h => !(h.tipo === tipo && h.doc === a.doc))); S.selAlb = null; S.albMarcas = new Set(); await recargar();
+}
+
+/* ---------------- PDF (jsPDF, cargado solo cuando se pide un documento) ---------------- */
+let libPDF = null;
+async function cargarPDF() {
+  if (!libPDF) { const [a, b] = await Promise.all([import("https://esm.sh/jspdf@2.5.1"), import("https://esm.sh/jspdf-autotable@3.8.2?deps=jspdf@2.5.1")]); libPDF = { jsPDF: a.jsPDF || a.default, tabla: b.default || b.autoTable }; }
+  return libPDF;
+}
+function pdfCabecera(doc, titulo, datos, ter) { // empresa a la izquierda, título y datos a la derecha, caja del tercero; devuelve la altura donde seguir
+  const E = CF("empresa"), nom = doc.setFont("helvetica", "bold").setFontSize(14).splitTextToSize(S.emp.nombre, 105);
+  doc.text(nom, 14, 18); const y0 = 18 + nom.length * 6;
+  doc.setFont("helvetica", "normal").setFontSize(9);
+  const emp = ["NIF " + (S.emp.cif || ""), E.dir, [E.cp, E.pob, E.prov ? "(" + E.prov + ")" : ""].filter(Boolean).join(" "), [E.tel, E.email, E.web].filter(Boolean).join(" · ")].filter(Boolean).flatMap(x => doc.splitTextToSize(x, 105));
+  doc.text(emp, 14, y0);
+  doc.setFont("helvetica", "bold").setFontSize(14).text(titulo, 196, 18, { align: "right" });
+  const D = datos.filter(d => d[1]); doc.setFont("helvetica", "normal").setFontSize(10); D.forEach((d, i) => doc.text(d[0] + ": " + d[1], 196, 25 + i * 5, { align: "right" }));
+  const dir = ((ter.direcciones || []).find(x => x.principal) || (ter.direcciones || [])[0]) || {};
+  const caja = [ter.nombre || "", "NIF " + (ter.cif || "—"), dir.dir, [dir.cp, dir.poblacion, dir.provincia].filter(Boolean).join(" ")].filter(Boolean).flatMap(x => doc.splitTextToSize(x, 80));
+  const y = Math.max(y0 + emp.length * 4.2, 25 + D.length * 5) + 4, alto = caja.length * 4.5 + 6;
+  doc.setDrawColor(180).rect(110, y, 86, alto); doc.setFontSize(10).text(caja, 113, y + 6);
+  return y + alto + 7;
+}
+function pdfPie(doc) {
+  const E = CF("empresa"), n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(100); if (E.registro) doc.text(doc.splitTextToSize(E.registro, 160), 14, 287); doc.text("Página " + i + " de " + n, 196, 291, { align: "right" }); doc.setTextColor(0); }
+}
+const pdfNotas = (doc, y, textos) => { doc.setFont("helvetica", "normal").setFontSize(9); for (const t of textos.filter(Boolean)) { const l = doc.splitTextToSize(t, 182); if (y + l.length * 4.5 > 280) { doc.addPage(); y = 20; } doc.text(l, 14, y); y += l.length * 4.5 + 2; } return y; };
+const ESTILO_TABLA = { styles: { fontSize: 9, cellPadding: 1.6 }, headStyles: { fillColor: [0, 98, 191], textColor: 255 }, margin: { left: 14, right: 14, bottom: 18 } };
+function pdfFactura(doc, tabla, d) { // factura, rectificativa, presupuesto o cotización
+  const E = CF("empresa"), y = pdfCabecera(doc, d.titulo, [["Número", d.numero], ["Fecha", d.fecha], [d.cliente ? "Vencimiento" : "Válido hasta", d.venc]], d.ter);
+  tabla(doc, { ...ESTILO_TABLA, startY: y, head: [["Descripción", "Cantidad", "Precio", "IVA", "Importe"]], body: d.lineas.map(l => [l.desc, q3(l.cant), eur(l.precio), String(l.pct).replace(".", ",") + " %", eur(l.base)]), columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" } }, didParseCell: c => { if (c.section === "head" && c.column.index > 0) c.cell.styles.halign = "right"; } });
+  const porIva = new Map(); d.lineas.forEach(l => { if (!l.auto) porIva.set(l.pct, r2((porIva.get(l.pct) || 0) + l.base)); });
+  const T = [...porIva].flatMap(([p, b]) => [["Base imponible " + String(p).replace(".", ",") + " %", eur(b)], ["IVA " + String(p).replace(".", ",") + " %", eur(b * p / 100)]]);
+  if (d.tot.rec) T.push(["Recargo de equivalencia", eur(d.tot.rec)]); if (d.ret) T.push(["Retención IRPF", "-" + eur(d.ret)]);
+  T.push([d.ret ? "TOTAL A PERCIBIR" : "TOTAL", eur(r2(d.tot.total - (d.ret || 0))) + " €"]);
+  tabla(doc, { startY: doc.lastAutoTable.finalY + 5, body: T, theme: "plain", styles: { fontSize: 10, cellPadding: 1 }, margin: { left: 116, right: 14, bottom: 18 }, columnStyles: { 1: { halign: "right" } }, didParseCell: c => { if (c.row.index === T.length - 1) { c.cell.styles.fontStyle = "bold"; c.cell.styles.fontSize = 12; } } });
+  pdfNotas(doc, doc.lastAutoTable.finalY + 10, [d.lineas.some(l => l.auto) ? "Operación con inversión del sujeto pasivo." : "", d.notas, d.cliente && (d.forma || E.iban) ? [d.forma ? "Forma de pago: " + d.forma : "", E.iban ? "IBAN " + E.iban : ""].filter(Boolean).join(" · ") : "", E.pie]);
+}
+function pdfAlbaran(doc, tabla, a, valorado) {
+  const cli = a.tipo === "V", y0 = pdfCabecera(doc, cli ? "ALBARÁN DE ENTREGA" : "ALBARÁN DE RECEPCIÓN", [["Número", a.num], ["Fecha", a.fecha], ["Pedido", a.ped ? a.ped.numero : ""], ["Albarán proveedor", cli ? "" : a.h.externo]], a.ter);
+  const y = pdfNotas(doc, y0, [[a.h.transporte ? "Transporte: " + a.h.transporte : "", a.h.matricula ? "Matrícula: " + a.h.matricula : "", a.h.bultos ? "Bultos: " + a.h.bultos : ""].filter(Boolean).join("    ")]);
+  const head = ["Artículo", "Descripción", "Lote", "Almacén", "Cantidad", "Unidad", ...(valorado ? ["Precio", "Importe"] : [])];
+  tabla(doc, { ...ESTILO_TABLA, startY: y, head: [head], body: a.lineas.map(l => [l.a.codigo || "", l.desc, l.lote, almNombre(l.m.almacen_id), q3(l.q), l.a.unidad || "", ...(valorado ? [eur(l.precio), eur(l.q * l.precio)] : [])]), columnStyles: { 4: { halign: "right" }, 6: { halign: "right" }, 7: { halign: "right" } }, didParseCell: c => { if (c.section === "head" && [4, 6, 7].includes(c.column.index)) c.cell.styles.halign = "right"; } });
+  let yy = doc.lastAutoTable.finalY + 6;
+  if (valorado) { doc.setFont("helvetica", "bold").setFontSize(10).text("Importe sin impuestos: " + eur(a.lineas.reduce((s, l) => s + r2(l.q * l.precio), 0)) + " €", 196, yy, { align: "right" }); yy += 7; }
+  yy = pdfNotas(doc, yy, [a.h.notas ? "Observaciones: " + a.h.notas : ""]) + 4;
+  if (yy > 245) { doc.addPage(); yy = 20; }
+  doc.setDrawColor(180).rect(14, yy, 86, 30).rect(110, yy, 86, 30); doc.setFont("helvetica", "normal").setFontSize(8).text(cli ? "Entregado por" : "Recibido en almacén por", 17, yy + 5).text(cli ? "Recibí conforme (firma, nombre, DNI y fecha)" : "Transportista (firma, nombre y DNI)", 113, yy + 5);
+}
+async function bajarPDF(nombre, pintar) {
+  let L; try { L = await cargarPDF(); } catch { return alert("No se pudo cargar el generador de PDF (necesita conexión). Puede usar Imprimir y elegir «Guardar como PDF»."); }
+  const doc = new L.jsPDF({ unit: "mm", format: "a4" }); pintar(doc, L.tabla); pdfPie(doc);
+  const url = URL.createObjectURL(doc.output("blob")), x = document.createElement("a"); x.href = url; x.download = nombre.replace(/[^\w.-]+/g, "_") + ".pdf"; document.body.appendChild(x); x.click(); x.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+const variasPaginas = (lista, pintar) => (doc, tabla) => lista.forEach((x, i) => { if (i) doc.addPage(); pintar(doc, tabla, x); });
+
+async function accionAlb(a, b) {
+  const id = b.dataset.id, tp = b.dataset.t;
+  switch (a) {
+    case "nuevoalb": if (!S.d.articulos.some(x => x.tipo !== "Servicio")) { alert("Cree antes un artículo de inventario."); return true; } await asegurarAlmacen(); S.albForm = albNuevo(tp); render(); return true;
+    case "cancelaralb": S.albForm = null; render(); return true;
+    case "addalbl": S.albForm.lineas.push({ art: "", cant: "", precio: "", lote: "" }); render(); return true;
+    case "delalbl": S.albForm.lineas.splice(+b.dataset.i, 1); if (!S.albForm.lineas.length) S.albForm.lineas.push({ art: "", cant: "", precio: "", lote: "" }); render(); return true;
+    case "registraralb": await registrarAlbDirecto(); return true;
+    case "selalb": S.selAlb = id; render(); return true;
+    case "recepcionar": { const p = S.d.pedidos.find(x => x.id === id); if (!p) return true; S.vista = p.tipo === "V" ? "pventa" : "pcompra"; abrirPedido(id); return true; }
+    case "facturaralb": await facturarAlbaranes(tp); return true;
+    case "anularalb": await anularAlbaran(tp); return true;
+    case "pdfalb": { const M = S.albMarcas || new Set(); let L = albaranes(tp).filter(x => M.has(x.doc)).reverse(); if (!L.length) L = [albaran(tp, S.selAlb)].filter(Boolean); if (!L.length) return true; await bajarPDF(L.length === 1 ? "albaran_" + L[0].num : "albaranes_" + hoy(), variasPaginas(L, (doc, t, x) => pdfAlbaran(doc, t, x, S.albValorado))); return true; }
+    case "pdffact": case "pdffacttodas": {
+      const T = S.d.facturas.filter(f => f.tipo === "V" && estadoF(f) === "Registrado").sort((x, y) => y.numero.localeCompare(x.numero));
+      const L = a === "pdffact" ? [T.find(f => f.id === S.imprFact) || T[0]].filter(Boolean) : T.filter(f => (f.fecha_emision || "").startsWith(String(S.ej))).reverse(); if (!L.length) { alert("No hay facturas registradas en " + S.ej + "."); return true; }
+      await bajarPDF(L.length === 1 ? "factura_" + L[0].numero : "facturas_" + S.ej, variasPaginas(L, (doc, t, f) => pdfFactura(doc, t, datosDocFactura(f)))); return true;
+    }
+    case "pdfpres": { const p = S.d.pedidos.find(x => x.id === S.selPed); if (p) await bajarPDF(p.numero, (doc, t) => pdfFactura(doc, t, datosDocPres(p))); return true; }
+  }
+  return false;
+}
+async function cambioAlb(t) {
+  const d = t.dataset;
+  if (d.al !== undefined) { S.albForm[d.al] = t.value.trim(); if (d.al === "almacen") render(); return true; }
+  if (d.all !== undefined) { const l = S.albForm.lineas[+d.all]; l[d.k] = t.value.trim(); if (d.k === "art") { const a = l.art ? artPorCod(l.art) : null; if (l.art && !a) alert("No existe ese artículo."); else if (a) { l.art = a.codigo; l.precio = String(+(S.albForm.tipo === "V" ? a.precio_venta : a.precio_compra) || 0); } render(); } return true; }
+  if (d.alm !== undefined) { const M = S.albMarcas || (S.albMarcas = new Set()); if (t.checked) M.add(d.alm); else M.delete(d.alm); render(); return true; }
+  if (d.alh !== undefined || d.allote !== undefined) {
+    const tipo = S.vista === "albv" ? "V" : "C", a = albaran(tipo, S.selAlb); if (!a) return true; const h = { ...a.h, num: a.num, tercero_id: a.ter.id, det: { ...(a.h.det || {}) } };
+    if (d.alh !== undefined) h[d.alh] = t.value.trim(); else h.det[d.allote] = { ...(h.det[d.allote] || {}), lote: t.value.trim() };
+    await guardarAlb(h); render(); return true;
+  }
+  if (t.id === "alb-valorado") { S.albValorado = t.checked; return true; }
+  return false;
+}
+
 /* ---------------- Render y eventos ---------------- */
 function render() {
   if (!S.empresas.length && !S.emp) return renderEmpresaNueva();
@@ -2885,6 +3061,7 @@ document.addEventListener("change", async e => {
     if (await cambioDoc(t)) return;
     if (cambioFS(t)) return;
     if (await cambioGL(t)) return;
+    if (await cambioAlb(t)) return;
     if (t.name === "alm") { leerFormEmp(); renderEmpresaNueva(); }
     else if (t.dataset.tf !== undefined) {
       setPath(S.terEdit, t.dataset.tf, t.type === "checkbox" ? t.checked : t.value);
@@ -2899,7 +3076,7 @@ document.addEventListener("change", async e => {
     else if (t.id === "emp") {
       const e2 = S.empresas.find(x => x.id === t.value);
       try { if (e2.almacen === "drive") await abrirDrive(e2.reg); } catch (err) { render(); throw err; }
-      S.emp = e2; S.libro = null; S.djAbierto = null; S.efSel = null; S.extracto = null; S.concilMarcas = null; S.bancoSel = ""; S.glCta = ""; S.asgDest = null; S.asgForm = null; S.selTA = null; S.consol = null; S.dimId = ""; S.fsMarcas = null; S.selFS = null; S.ped = null; S.liqMarcas = null; S.selCred = null; S.selPed = null; await recargar();
+      S.emp = e2; S.libro = null; S.djAbierto = null; S.efSel = null; S.extracto = null; S.concilMarcas = null; S.bancoSel = ""; S.albForm = null; S.albMarcas = null; S.selAlb = null; S.glCta = ""; S.asgDest = null; S.asgForm = null; S.selTA = null; S.consol = null; S.dimId = ""; S.fsMarcas = null; S.selFS = null; S.ped = null; S.liqMarcas = null; S.selCred = null; S.selPed = null; await recargar();
     }
     else if (t.id === "ej") { S.ej = +t.value; S.glDesde = ""; S.glHasta = ""; render(); }
     else if (t.id === "cm") { S.filtroCta = t.value; render(); }
@@ -2995,7 +3172,8 @@ document.addEventListener("click", async e => {
     if (await accionDoc(a, b)) return;
     if (await accionFS(a, b)) return;
     if (await accionGL(a, b)) return;
-    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; S.ped = null; S.artEdit = null; S.almEdit = null; S.ajuste = null; S.cfgEdit = null; S.afEdit = null; S.bajaAF = false; S.djAbierto = null; S.efSel = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
+    if (await accionAlb(a, b)) return;
+    if (a === "vista") { S.nav = false; S.vista = b.dataset.v; if (!S.vista.startsWith("diario")) S.libro = null; S.fact = null; S.terEdit = null; S.ped = null; S.artEdit = null; S.almEdit = null; S.ajuste = null; S.cfgEdit = null; S.afEdit = null; S.bajaAF = false; S.djAbierto = null; S.efSel = null; S.albForm = null; S.albMarcas = null; if (S.vista !== "mayor") S.filtroTer = ""; render(); }
     else if (a === "nav") { S.nav = !S.nav; if (S.nav) S.navMod = moduloDe(S.vista) || S.navMod; render(); }
     else if (a === "navmod") { S.navMod = b.dataset.id; render(); }
     else if (a === "navsec") { S.navCerr[b.dataset.id] = !S.navCerr[b.dataset.id]; render(); }
