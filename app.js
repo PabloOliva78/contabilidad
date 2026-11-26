@@ -29,6 +29,7 @@ const PGC = [
   ["121","Resultados negativos de ejercicios anteriores"],["460","Anticipos de remuneraciones"],["462","Embargos de salarios"],["470","H.P. deudora por diversos conceptos"],
   ["4709","H.P. deudora por devolución de impuestos"],["473","H.P. retenciones y pagos a cuenta"],["4745","Crédito por pérdidas a compensar del ejercicio"],
   ["4752","H.P. acreedora por Impuesto sobre Sociedades"],["4771","H.P. recargo de equivalencia"],["4773","H.P. IVA repercutido intracomunitario"],
+  ["310","Materias primas"],["320","Elementos y conjuntos incorporables"],["350","Productos terminados"],["610","Variación de existencias de mercaderías"],["611","Variación de existencias de materias primas"],["612","Variación de existencias de otros aprovisionamientos"],["712","Variación de existencias de productos terminados"],
   ["555","Partidas pendientes de aplicación"],["602","Compras de otros aprovisionamientos"],["606","Descuentos sobre compras por pronto pago"],["609","Rappels por compras"]
 ];
 
@@ -166,7 +167,7 @@ const db = new Proxy({}, { get: (_, m) => (...a) => m === "empresas" ? listarEmp
 
 /* ---------------- Estado ---------------- */
 const S = { empresas: [], emp: null, vista: "inicio", sel: null, nueva: false, selAs: null, filtroCta: "", libro: null, selLote: null, nav: false, edit: null, selTer: null, terEdit: null, selFact: null, fact: null, filtroTer: "",
-  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
+  d: { cuentas: [], asientos: [], apuntes: [], lineas: [], libros: [], terceros: [], facturas: [], flineas: [], liquidaciones: [], manual: [], almacenes: [], articulos: [], pedidos: [], plineas: [], movinv: [] }, fechaRegul: "", selRegul: null, cfgEdit: null, selCfg: {}, selPagoImp: null, selInf: null, liqPer: "", liqInt: "", filtroDirIR: "", ped: null, selPed: null, selArt: null, artEdit: null, almEdit: null, ajuste: null, selMov: null, filtroAlm: "", pagoF: null, selPend: null, periodo: Math.ceil((new Date().getMonth() + 1) / 3) + "T", libroIva: "V", tabs: {}, selLinea: null, navMod: "", navCerr: {}, fichaCerr: {}, selCombo: "", comboForm: null, selCod: "", filtroCod: "todos", liqAcre: "", liqDeud: "", liqBanco: "", ej: new Date().getFullYear(), lineas: null, fechaAs: "", conceptoAs: "", docAs: "" };
 const nombreCuenta = c => (S.d.cuentas.find(x => x.codigo === c) || {}).nombre || "";
 
 async function recargar() { S.d = await db.cargar(S.emp.id); render(); }
@@ -250,6 +251,7 @@ const NAV = [
   { g: "Gestión del inventario", sec: [
     { n: "Artículos", it: [["articulos", "Todos los artículos"]] },
     { n: "Consultas e informes", sub: [{ n: "Consultas", it: [["existencias", "Existencias disponibles"], ["movinv", "Transacciones de inventario"]] }] },
+    { n: "Periódico", it: [["regexist", "Regularización de existencias"]] },
     { n: "Configurar", sub: [{ n: "Almacenes", it: [["almacenes", "Almacenes"]] }] }] },
   { g: "Impuestos", sec: [
     { n: "Impuestos indirectos", sub: [{ n: "Impuestos", it: [["codigos", "Códigos de impuestos"], ["combos", "Combinaciones de impuestos"], ["gimpuestos", "Grupos de impuestos"], ["gartic", "Grupos de impuestos de artículos"], ["gregistro", "Grupos de registro"], ["autoridades", "Autoridades fiscales"], ["periodosliq", "Períodos de liquidación de impuestos"]] }] },
@@ -261,7 +263,7 @@ const NAV = [
 ];
 const moduloDe = v => (NAV.find(m => m.sec.some(s => (s.it || []).some(i => i[0] === v) || (s.sub || []).some(b => b.it.some(i => i[0] === v)))) || {}).g || "";
 const NOMBRES = { inicio: "Inicio", cuentas: "Cuentas principales", diario: "Diarios generales", mayor: "Transacciones del libro mayor", sumas: "Balance de comprobación", estados: "Estados financieros",
-  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes" };
+  clientes: "Todos los clientes", fventa: "Facturas de cliente", proveedores: "Todos los proveedores", fcompra: "Facturas de proveedor", cobros: "Cobros pendientes", pagos: "Pagos pendientes", diariofprov: "Diario de facturas de proveedor", diariofcli: "Diario de facturas de cliente", codigos: "Códigos de impuestos", combos: "Combinaciones de impuestos", libroiva: "Libros de IVA", m303: "Modelo 303", m390: "Modelo 390", m349: "Modelo 349", m347: "Modelo 347", m111: "Modelo 111", m115: "Modelo 115", m123: "Modelo 123", gimpuestos: "Grupos de impuestos", gartic: "Grupos de impuestos de artículos", gregistro: "Grupos de registro", autoridades: "Autoridades fiscales", periodosliq: "Períodos de liquidación de impuestos", imptoreg: "Impuestos registrados", liqreg: "Liquidar y registrar impuestos", pagosimp: "Pagos de impuestos", infiva: "Informes de IVA españoles", informar: "Informar impuestos para el período de liquidación", intrastat: "Intrastat", parcont: "Parámetros de Contabilidad general", parprov: "Parámetros de proveedores", parcli: "Parámetros de clientes", pventa: "Pedidos de venta", pcompra: "Pedidos de compra", articulos: "Todos los artículos", existencias: "Existencias disponibles", movinv: "Transacciones de inventario", almacenes: "Almacenes", regexist: "Regularización de existencias" };
 
 const btn = (a, t, extra = "", dis = false) => `<button data-a="${a}" ${extra} ${dis ? "disabled" : ""}>${t}</button>`;
 const SEP = `<span class="sep"></span>`;
@@ -1141,6 +1143,7 @@ function fichaArticulo() {
   const comp = `<div class="fgrid"><div class="fcol"><h4>COMPRAS</h4>${campoE("Precio de compra", "ae", e, "precio_compra", { tipo: "number" })}${campoE("Código de impuestos (compras)", "ae", e, "cod_iva_c", { opts: codsLinea("C").map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campoE("Cuenta de gastos (9 dígitos)", "ae", e, "cuenta_compra", { list: "dlcta", ph: "600…" })}${campoE("Proveedor principal", "ae", e, "ficha.proveedor", { list: "dlprov" })}</div></div>`;
   const vent = `<div class="fgrid"><div class="fcol"><h4>VENTAS</h4>${campoE("Precio de venta", "ae", e, "precio_venta", { tipo: "number" })}${campoE("Código de impuestos (ventas)", "ae", e, "cod_iva_v", { opts: codsLinea("V").map(c => [c.cod, c.cod + " · " + (c.pct ? String(c.pct).replace(".", ",") + " %" : c.nombre)]) })}${campoE("Cuenta de ingresos (9 dígitos)", "ae", e, "cuenta_venta", { list: "dlcta", ph: "700…" })}</div></div>`;
   const inv = `<div class="fgrid"><div class="fcol"><h4>INVENTARIO</h4>${campoE("Existencias mínimas", "ae", e, "stock_min", { tipo: "number" })}<label class="fld">Modelo de inventario<input value="Coste medio ponderado" disabled></label></div>
+    <div class="fcol"><h4>CONTABILIDAD DE EXISTENCIAS</h4>${campoE("Cuenta de existencias (9 dígitos)", "ae", e, "ficha.cta_exist", { list: "dlcta", ph: CTA_EXIST })}${campoE("Cuenta de variación de existencias (9 dígitos)", "ae", e, "ficha.cta_var", { list: "dlcta", ph: CTA_VAR })}</div>
     <div class="fcol"><h4>EXISTENCIAS ACTUALES</h4>${S.d.articulos.some(a => a.id === e.id) ? S.d.almacenes.map(al => `<label class="fld">${esc(al.nombre)}<input disabled value="${q3(stockArt(e.id, al.id))}"></label>`).join("") || "<p>Sin almacenes.</p>" : "<p style='color:var(--tx2)'>Guarde el artículo para ver sus existencias.</p>"}</div></div>`;
   return pagina("Artículo", acc, `<datalist id="dlcta">${optsCuentas()}</datalist><datalist id="dlprov">${S.d.terceros.filter(t => t.tipo === "P").map(t => `<option value="${esc(t.codigo)}">${esc(t.nombre)}</option>`).join("")}</datalist>${secFicha("a_gen", "General", gen)}${secFicha("a_comp", "Compras", comp)}${secFicha("a_vent", "Ventas", vent)}${e.tipo === "Servicio" ? "" : secFicha("a_inv", "Gestión del inventario", inv)}`, { tabs: ["Ficha"], vista: e.codigo + (e.nombre ? " : " + e.nombre : "") });
 }
@@ -1149,6 +1152,9 @@ async function guardarArt() {
   if (!a.codigo || !a.nombre) return alert("Faltan el número y el nombre del artículo.");
   if (S.d.articulos.some(x => x.id !== a.id && x.codigo.toLowerCase() === a.codigo.toLowerCase())) return alert("Ya existe ese número de artículo.");
   for (const [c, n] of [[a.cuenta_compra, "de gastos"], [a.cuenta_venta, "de ingresos"]]) if (c && !cuentaValida(c)) return alert("La cuenta " + n + " " + c + " no existe o no es de movimiento (9 dígitos).");
+  for (const [k, n] of [["cta_exist", "de existencias"], ["cta_var", "de variación"]]) { const c = String(a.ficha[k] || "").trim(); a.ficha[k] = c; if (c && !esMov(c)) return alert("La cuenta " + n + " debe tener 9 dígitos."); }
+  if (a.ficha.cta_exist && !a.ficha.cta_exist.startsWith("3")) return alert("La cuenta de existencias debe ser del grupo 3 (300, 310, 320, 350…).");
+  if (a.ficha.cta_var && !/^(61|71)/.test(a.ficha.cta_var)) return alert("La cuenta de variación debe ser 61x o 71x.");
   await db.guardarArticulo(a); S.artEdit = null; S.selArt = a.id; await recargar();
 }
 V.articulos = vistaArticulos;
@@ -1438,6 +1444,64 @@ async function accionInv(a, b) { // clics del inventario y los pedidos; devuelve
   return false;
 }
 
+/* ---------------- Existencias en contabilidad: regularización (variación de existencias) ---------------- */
+// Método del PGC: las compras van al gasto (60x) y, en la fecha de cierre, se ajusta la cuenta de existencias (grupo 3) a lo que vale
+// el inventario, contra la cuenta de variación de existencias (61x / 71x).
+const CTA_EXIST = "300000001", CTA_VAR = "610000001";
+function valorArt(a, fecha) { // existencias y valor a una fecha, a coste medio ponderado de las entradas hasta esa fecha
+  let q = 0, qe = 0, ve = 0;
+  S.d.movinv.forEach(m => { if (m.articulo_id !== a.id || m.fecha > fecha) return; q += +m.cantidad; if ((m.tipo === "Recepción" || m.tipo === "Ajuste") && +m.cantidad > 0) { qe += +m.cantidad; ve += +m.cantidad * (+m.coste || 0); } });
+  const coste = qe ? ve / qe : (+a.precio_compra || 0);
+  return { q: r3(q), coste, valor: r2(q * coste) };
+}
+const aperturaEn = (cta, ej) => { const ids = new Set(S.d.asientos.filter(x => x.ejercicio === ej && /apertura/i.test((x.concepto || "") + " " + (x.origen || ""))).map(x => x.id)); return S.d.apuntes.some(p => p.cuenta === cta && ids.has(p.asiento_id)); };
+function saldoExist(cta, fecha) { // saldo contable de la cuenta de existencias a la fecha; si el ejercicio tiene asiento de apertura, solo ese ejercicio
+  const ej = +fecha.slice(0, 4), soloEj = aperturaEn(cta, ej);
+  const ids = new Set(S.d.asientos.filter(a => a.fecha <= fecha && (!soloEj || a.ejercicio === ej)).map(a => a.id));
+  return r2(S.d.apuntes.reduce((s, p) => p.cuenta === cta && ids.has(p.asiento_id) ? s + +p.debe - +p.haber : s, 0));
+}
+function datosRegul(fecha) {
+  const det = S.d.articulos.filter(a => a.tipo !== "Servicio").map(a => ({ a, ...valorArt(a, fecha), exist: (a.ficha || {}).cta_exist || CTA_EXIST, vari: (a.ficha || {}).cta_var || CTA_VAR })).filter(x => x.q || x.valor).sort((x, y) => x.a.codigo.localeCompare(y.a.codigo));
+  const m = new Map(), errores = [];
+  const grupo = (exist, vari) => { if (!m.has(exist)) m.set(exist, { exist, vari, valor: 0 }); return m.get(exist); };
+  S.d.articulos.filter(a => a.tipo !== "Servicio").forEach(a => { const f = a.ficha || {}, g = grupo(f.cta_exist || CTA_EXIST, f.cta_var || CTA_VAR); if (g.vari !== (f.cta_var || CTA_VAR)) errores.push("La cuenta de existencias " + g.exist + " está asignada a dos cuentas de variación distintas (artículo " + a.codigo + "). Use una sola por cuenta."); });
+  det.forEach(x => { const g = grupo(x.exist, x.vari); g.valor = r2(g.valor + x.valor); });
+  const cuentas = [...m.values()].map(g => { const saldo = saldoExist(g.exist, fecha); return { ...g, saldo, ajuste: r2(g.valor - saldo) }; }).sort((a, b) => a.exist.localeCompare(b.exist));
+  det.filter(x => x.q < 0).forEach(x => errores.push("El artículo " + x.a.codigo + " tiene existencias negativas (" + q3(x.q) + ") a esa fecha. Corríjalo antes de regularizar."));
+  const apuntes = [];
+  cuentas.filter(c => c.ajuste).forEach(c => { const imp = Math.abs(c.ajuste), sube = c.ajuste > 0;
+    apuntes.push({ cuenta: c.exist, concepto: "Regularización de existencias", debe: sube ? imp : 0, haber: sube ? 0 : imp }, { cuenta: c.vari, concepto: "Variación de existencias", debe: sube ? 0 : imp, haber: sube ? imp : 0 }); });
+  return { det, cuentas, apuntes, errores };
+}
+const regulaciones = () => S.d.asientos.filter(a => a.origen === "existencias").sort((a, b) => b.fecha.localeCompare(a.fecha) || b.numero - a.numero);
+const fechaRegul = () => S.fechaRegul || `${S.ej}-12-31`;
+V.regexist = () => {
+  const f = fechaRegul(), D = datosRegul(f), hechas = regulaciones(), posterior = hechas.find(a => a.fecha > f), sel = hechas.find(a => a.id === S.selRegul);
+  const nom = c => nombreCuenta(c) || nombreMaestro(c.slice(0, 3));
+  const tDebe = r2(D.apuntes.reduce((s, p) => s + p.debe, 0));
+  const acc = `<button class="p" data-a="generarregul" ${D.apuntes.length && !D.errores.length && !posterior ? "" : "disabled"}>Generar asiento de variación de existencias</button>` + SEP + btn("deshacerregul", "Deshacer regularización", "", !sel);
+  return pagina("Regularización de existencias", acc, `${D.errores.map(e => `<p class="ko">${esc(e)}</p>`).join("")}${posterior ? `<p class="ko">Hay una regularización posterior (${posterior.fecha}). Deshágala antes de regularizar a una fecha anterior.</p>` : ""}
+   <div class="lista"><table><tr><th>Cuenta de existencias</th><th>Nombre</th><th>Cuenta de variación</th><th class="n">Saldo contable</th><th class="n">Valor del inventario</th><th class="n">Variación</th></tr>${D.cuentas.map(c => `<tr><td>${c.exist}</td><td>${esc(nom(c.exist))}</td><td>${c.vari}</td><td class="n">${eur(c.saldo)}</td><td class="n">${eur(c.valor)}</td><td class="n">${eur(c.ajuste)}</td></tr>`).join("") || `<tr><td colspan="6" class="vacio">No hay artículos de inventario.</td></tr>`}</table></div>
+   <h3 style="margin-top:1rem">Asiento propuesto a ${f}</h3><div class="lista"><table><tr><th>Cuenta</th><th>Nombre</th><th>Concepto</th><th class="n">Debe</th><th class="n">Haber</th></tr>${D.apuntes.map(p => `<tr><td>${p.cuenta}</td><td>${esc(nom(p.cuenta))}</td><td>${p.concepto}</td><td class="n">${sal(p.debe)}</td><td class="n">${sal(p.haber)}</td></tr>`).join("") || `<tr><td colspan="5" class="vacio">La contabilidad ya coincide con el inventario: no hay nada que regularizar.</td></tr>`}${D.apuntes.length ? `<tr class="tot"><td colspan="3">Totales</td><td class="n">${eur(tDebe)}</td><td class="n">${eur(tDebe)}</td></tr>` : ""}</table></div>
+   <h3 style="margin-top:1rem">Detalle del inventario valorado a ${f}</h3><div class="lista"><table><tr><th>Artículo</th><th>Nombre</th><th class="n">Existencias</th><th class="n">Coste medio</th><th class="n">Valor</th><th>Cuenta</th></tr>${D.det.map(x => `<tr class="${x.q < 0 ? "ko" : ""}"><td>${esc(x.a.codigo)}</td><td>${esc(x.a.nombre)}</td><td class="n">${q3(x.q)}</td><td class="n">${eur(x.coste)}</td><td class="n">${eur(x.valor)}</td><td>${x.exist}</td></tr>`).join("") || `<tr><td colspan="6" class="vacio">Sin existencias a esa fecha.</td></tr>`}</table></div>
+   <h3 style="margin-top:1rem">Regularizaciones registradas</h3><div class="lista"><table><tr><th>Fecha</th><th>Asiento</th><th>Concepto</th></tr>${hechas.map(a => `<tr data-sel class="${a.id === S.selRegul ? "sel" : ""}" data-a="selregul" data-id="${a.id}"><td>${a.fecha}</td><td>${a.ejercicio}-${String(a.numero).padStart(5, "0")}</td><td>${esc(a.concepto)}</td></tr>`).join("") || `<tr><td colspan="3" class="vacio">Ninguna todavía.</td></tr>`}</table></div>
+   <p style="color:var(--tx2)">Ajusta cada cuenta de existencias al valor del inventario a la fecha elegida, contra su cuenta de variación. El saldo contable que no esté respaldado por artículos del inventario se dará de baja: cargue antes las existencias iniciales con un ajuste de inventario.</p>`,
+    { tabs: ["Regularización"], filtros: `<label>Fecha de regularización<input type="date" id="fregul" value="${f}"></label>` });
+};
+async function generarRegul() {
+  const f = fechaRegul(), D = datosRegul(f); if (!D.apuntes.length || D.errores.length) return;
+  const bajas = D.cuentas.filter(c => c.ajuste < 0 && !c.valor);
+  if (!confirm("Se registrará el asiento de variación de existencias a " + f + "." + (bajas.length ? "\n\nATENCIÓN: " + bajas.map(c => c.exist + " quedará a cero (saldo actual " + eur(c.saldo) + ")").join(", ") + " porque no hay existencias de artículos en esa cuenta." : "") + "\n\n¿Continuar?")) return;
+  for (const p of D.apuntes) { // crea los títulos y las cuentas que falten
+    if (S.d.cuentas.some(c => c.codigo === p.cuenta)) continue;
+    const t = p.cuenta.slice(0, 3);
+    if (!maestroDe(p.cuenta)) { if (!nombreMaestro(t)) return alert("No existe el título " + t + " en el plan de cuentas. Créelo antes en Cuentas principales."); await db.crearCuentas(S.emp.id, [[t, nombreMaestro(t)]]); S.d.cuentas.push({ id: uid(), empresa_id: S.emp.id, codigo: t, nombre: nombreMaestro(t) }); }
+    await asegurarCuenta(p.cuenta, nombreMaestro(t) || nombreMaestro(maestroDe(p.cuenta)));
+  }
+  await db.crearAsiento(S.emp.id, f, "Variación de existencias a " + f, D.apuntes, "existencias", "EXIST-" + f);
+  await recargar();
+}
+
 /* ---------------- Modelo de impuestos de D365: grupos, autoridades, períodos, impuestos registrados, parámetros ---------------- */
 // La configuración se guarda en modelos_manual (modelo "taxcfg"), sin tablas nuevas. Los valores iniciales salen de los códigos de impuestos.
 const lista = (f) => CODIGOS.filter(f).map(c => c.cod);
@@ -1633,6 +1697,14 @@ V.parcont = () => vistaParam("parcont"); V.parprov = () => vistaParam("parprov")
 async function accionImp(a, b) {
   const id = b.dataset.id, k = b.dataset.k;
   switch (a) {
+    case "selregul": S.selRegul = id; render(); return true;
+    case "generarregul": await generarRegul(); return true;
+    case "deshacerregul": {
+      const x = regulaciones().find(y => y.id === S.selRegul); if (!x) return true;
+      const post = regulaciones().find(y => y.fecha > x.fecha); if (post) { alert("Deshaga antes la regularización posterior (" + post.fecha + ")."); return true; }
+      if (confirm("¿Deshacer la regularización del " + x.fecha + "? Se eliminará el asiento nº " + x.numero + ".")) { await db.borrarAsiento(x.id); S.selRegul = null; await recargar(); }
+      return true;
+    }
     case "cfgnuevo": S.cfgEdit = { k, nuevo: true, obj: k === "gruposImp" ? { id: "", desc: "", lado: "V", codigos: [] } : k === "gruposArt" ? { id: "", desc: "", codigos: [] } : k === "periodos" ? { id: "", desc: "", autoridad: "", unidad: "Meses", duracion: 3, modelo: "—" } : {} }; render(); return true;
     case "cfgedit": { const x = CF(k).find(y => y.id === id); if (x) { S.selCfg[k] = x.id; S.cfgEdit = { k, nuevo: false, obj: JSON.parse(JSON.stringify(x)) }; render(); } return true; }
     case "cfgcancel": S.cfgEdit = null; render(); return true;
@@ -1671,6 +1743,7 @@ async function cambioImp(t) {
   if (d.cg !== undefined) { S.cfgEdit.obj[d.cg] = t.value; if (d.cg === "lado") { S.cfgEdit.obj.codigos = []; render(); } return true; }
   if (d.cgc !== undefined) { const o = S.cfgEdit.obj, s = new Set(o.codigos || []); if (t.checked) s.add(d.cgc); else s.delete(d.cgc); o.codigos = [...s]; return true; }
   if (d.pm !== undefined) { const [pg, c] = d.pm.split("|"), P = { ...CF("params") }; P[pg] = { ...(P[pg] || {}), [c]: t.type === "checkbox" ? t.checked : t.value }; if (c === "cuentaTes" && t.value && !esMov(t.value)) { alert("La cuenta debe tener 9 dígitos."); render(); return true; } await guardarCfg("params", P); return true; }
+  if (t.id === "fregul") { S.fechaRegul = t.value; render(); return true; }
   if (t.id === "lq-per") { S.liqPer = t.value; S.liqInt = ""; render(); return true; }
   if (t.id === "lq-int") { S.liqInt = t.value; render(); return true; }
   if (t.id === "fdirir") { S.filtroDirIR = t.value; render(); return true; }
