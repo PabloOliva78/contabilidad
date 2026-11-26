@@ -249,7 +249,7 @@ const NAV = [
     { n: "Cierre del periodo", it: [["calendario", "Calendario del libro mayor"], ["cierre", "Cierre del ejercicio"]] },
     { n: "Configurar", sub: [{ n: "Plan de cuentas", it: [["cuentas", "Cuentas principales"]] }, { n: "Parámetros", it: [["parcont", "Parámetros de Contabilidad general"], ["empresa", "Datos de la empresa"]] }] },
     { n: "Presupuestación", it: [["presupuesto", "Control presupuestario"]] }] },
-  { g: "Cuentas a cobrar", sec: [
+  { g: "Clientes", sec: [
     { n: "Clientes", it: [["clientes", "Todos los clientes"]] },
     { n: "Facturas y cobros", sub: [{ n: "Facturas", it: [["fventa", "Facturas de cliente"], ["diariofcli", "Diario de facturas de cliente"]] }, { n: "Cobros", it: [["cobros", "Cobros pendientes"]] }] },
     { n: "Pagos", it: [["dcobro", "Diario de pagos de clientes"]], sub: [{ n: "Letra de cambio", it: [["dletra", "Diario de creación de letras de cambio"], ["dletraimp", "Diario de impago de letras de cambio"], ["dletraren", "Diario de renegociación de letras de cambio"], ["dletraenv", "Diario de envíos"], ["dletraliq", "Diario de liquidación de letra de cambio"], ["cartera", "Cartera de efectos"], ["remesas", "Remesas"]] }, { n: "Consultas de letras", it: [["letdiario", "Diario de letras de cambio"], ["letabiertas", "Informe de letras abiertas"], ["letimpagadas", "Letras impagadas"], ["letfactura", "Relación letra-factura"], ["letestad", "Estadísticas de letra de cambio"]] }] },
@@ -257,7 +257,7 @@ const NAV = [
     { n: "Facturas de servicios", it: [["fservicios", "Todas las facturas de servicios"], ["fsperiod", "Facturas periódicas"], ["plantfs", "Plantillas de factura de servicios"]] },
     { n: "Documentos y crédito", it: [["rectif", "Facturas rectificativas"], ["liquidar", "Liquidar transacciones"], ["imprfact", "Imprimir facturas"], ["credito", "Crédito y cobros"]] },
     { n: "Configurar", it: [["parcli", "Parámetros de clientes"]] }] },
-  { g: "Cuentas a pagar", sec: [
+  { g: "Proveedores", sec: [
     { n: "Proveedores", it: [["proveedores", "Todos los proveedores"]] },
     { n: "Facturas y pagos", sub: [{ n: "Facturas", it: [["fcompra", "Facturas de proveedor"], ["diariofprov", "Diario de facturas de proveedor"]] }, { n: "Pagos", it: [["pagos", "Pagos pendientes"]] }] },
     { n: "Pagos", it: [["dpago", "Diario de pagos a proveedores"]], sub: [{ n: "Pagarés", it: [["dpagare", "Diario de creación de pagarés"], ["dpagren", "Diario de renegociación de pagarés"], ["dpagliq", "Diario de liquidación de pagarés"], ["cartera", "Cartera de efectos"]] }] },
